@@ -49,6 +49,7 @@
 - Recently used applications, files and folders, plus a *Frequently used* section.
 - Every section is collapsible; the collapsed state is remembered per instance (`homeCollapsedSections`).
 - Per-section limits for recent applications, files and folders.
+- When the KDE activity history is off — *Recent Files* in System Settings, which is what feeds all of these sections — the page shows a centered **Turn on recent files** button that enables it and restarts `kactivitymanagerd`, plus a shortcut to the full settings page.
 
 ### Apps
 

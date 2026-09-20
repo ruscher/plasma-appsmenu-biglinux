@@ -26,9 +26,35 @@ EmptyPage {
     Accessible.name: i18n("Home page")
     Accessible.role: Accessible.Pane
 
+    // Any of the recent/frequent sections the user still wants to see. When
+    // they are all off there is nothing to enable, so the call to action below
+    // stays hidden.
+    readonly property bool wantsRecentSections: Plasmoid.configuration.showRecentSection
+        || Plasmoid.configuration.showRecentFiles
+        || Plasmoid.configuration.showRecentFolders
+        || Plasmoid.configuration.showFrequentSection
+
     T.StackView.onActivated: {
         kickoff.sideBar = null
         kickoff.contentArea = root
+        recentActivity.refresh()
+    }
+
+    // KDE activity history ("Recent Files" in System Settings). Without it the
+    // recent models never receive another entry, whatever the user does.
+    Components.RecentActivityTracking {
+        id: recentActivity
+    }
+
+    // Re-read when the menu is opened: the setting may have changed in
+    // System Settings while the menu was closed.
+    Connections {
+        target: kickoff
+        function onExpandedChanged() {
+            if (kickoff.expanded) {
+                recentActivity.refresh()
+            }
+        }
     }
 
     contentItem: Item {
@@ -121,6 +147,99 @@ EmptyPage {
                                 PC3.ToolTip.visible: hovered && PC3.ToolTip.text.length > 0
                                 PC3.ToolTip.delay: Kirigami.Units.toolTipDelay
                             }
+                        }
+                    }
+                }
+
+                // ══════════════════════════════════
+                // ACTIVITY HISTORY IS OFF — call to action
+                // ══════════════════════════════════
+                // While the history is off nothing new is recorded: the recent
+                // sections below stop growing and, once the entries recorded
+                // earlier expire, hide themselves entirely. Offer the fix here
+                // rather than letting the page go silently empty.
+                Item {
+                    id: enableRecentBox
+
+                    Layout.fillWidth: true
+                    Layout.leftMargin: Kirigami.Units.mediumSpacing
+                    Layout.rightMargin: Kirigami.Units.mediumSpacing
+                    Layout.preferredHeight: enableRecentColumn.implicitHeight + Kirigami.Units.gridUnit * 2
+                    visible: !recentActivity.tracking && root.wantsRecentSections
+
+                    Accessible.role: Accessible.Pane
+                    Accessible.name: enableRecentTitle.text
+
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: Kirigami.Units.mediumSpacing
+                        color: Qt.rgba(
+                            Kirigami.Theme.backgroundColor.r,
+                            Kirigami.Theme.backgroundColor.g,
+                            Kirigami.Theme.backgroundColor.b,
+                            0.35
+                        )
+                        border.width: 1
+                        border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.06)
+                    }
+
+                    ColumnLayout {
+                        id: enableRecentColumn
+
+                        anchors.centerIn: parent
+                        width: Math.min(parent.width - Kirigami.Units.gridUnit * 2, Kirigami.Units.gridUnit * 20)
+                        spacing: Kirigami.Units.smallSpacing
+
+                        Kirigami.Icon {
+                            source: "document-open-recent"
+                            Layout.alignment: Qt.AlignHCenter
+                            Layout.preferredWidth: Kirigami.Units.iconSizes.large
+                            Layout.preferredHeight: Kirigami.Units.iconSizes.large
+                            opacity: 0.8
+                        }
+
+                        PC3.Label {
+                            id: enableRecentTitle
+                            text: i18n("Recent files and locations are turned off")
+                            font.weight: Font.DemiBold
+                            horizontalAlignment: Text.AlignHCenter
+                            wrapMode: Text.Wrap
+                            Layout.fillWidth: true
+                            Accessible.role: Accessible.Heading
+                        }
+
+                        PC3.Label {
+                            text: i18n("KDE is not recording the applications and files you open, so your recent apps, files and folders stop appearing here. Turn it on to see them again.")
+                            font: Kirigami.Theme.smallFont
+                            color: Kirigami.Theme.disabledTextColor
+                            horizontalAlignment: Text.AlignHCenter
+                            wrapMode: Text.Wrap
+                            Layout.fillWidth: true
+                            Layout.bottomMargin: Kirigami.Units.smallSpacing
+                        }
+
+                        PC3.Button {
+                            Layout.alignment: Qt.AlignHCenter
+                            icon.name: "document-open-recent"
+                            text: recentActivity.busy ? i18n("Turning on…") : i18n("Turn on recent files")
+                            enabled: !recentActivity.busy
+
+                            Accessible.role: Accessible.Button
+                            Accessible.name: text
+                            Accessible.description: i18n("Enable the KDE activity history that records recently used applications, files and folders")
+
+                            onClicked: recentActivity.enable()
+                        }
+
+                        PC3.Button {
+                            Layout.alignment: Qt.AlignHCenter
+                            flat: true
+                            text: i18n("Open settings…")
+
+                            Accessible.role: Accessible.Button
+                            Accessible.name: i18n("Open the Recent Files settings")
+
+                            onClicked: recentActivity.openSettings()
                         }
                     }
                 }
