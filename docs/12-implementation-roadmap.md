@@ -30,20 +30,25 @@ Ordem que respeita a prioridade da missão (correção → estabilidade → perf
 - [ ] Extrair Places para arquivo próprio.
 - [ ] Integrar `KFilePlacesModel` (Computer/Devices/Network/Remote por eventos).
 
-## Rodada 5 — Fundação de Gadgets (Info)
-- [ ] `GadgetManager` + `GadgetHost` (isolamento de falhas) + `GadgetGrid`
-      (drag/drop, colisão, snap) + persistência via `Plasmoid.configuration`.
-- [ ] Migrar 2 gadgets locais (Clock, DriveInfo) para dados **sem shell**
-      (Qt/Solid). Lazy load + pause quando invisível.
+## Rodada 4 (executada) — UX + Fundação de Gadgets + gadgets locais e online ✅
+- [x] Lembrar aba/categoria; pastas recentes; sidebar Apps = Places; power
+      buttons; avatar grande → pasta pessoal.
+- [x] `GadgetRegistry` + `GadgetHost` (isolamento de falhas) + `GadgetGrid`
+      (drag/drop, reorganização, auto-scroll) + galeria + configurações +
+      persistência via `Plasmoid.configuration`. Pausa quando invisível.
+- [x] Gadgets locais sem shell: Clock, Calendar, Countdown, Notes, CPU,
+      Memory, Battery, Drive Info, Drive Monitor, Network, System Info,
+      Media (MPRIS), Clipboard (Klipper), Quick Links, Quotes, Tips, Gallery, 2048.
+- [x] Rede compartilhada (`GadgetNet.js`) + providers: Weather (Open-Meteo),
+      Currency (Frankfurter), RSS/Atom, Sports (TheSportsDB).
 
-## Rodada 6 — Gadgets locais restantes
-- [ ] Calendar, Notes, CpuMeter (KSystemStats), Battery (Solid/UPower),
-      Clipboard (Klipper/DBus), Countdown, MediaControls (MPRIS), DriveMonitor.
-
-## Rodada 7 — Gadgets online (providers)
-- [ ] Infra de rede compartilhada (timeout/retry/cache/offline).
-- [ ] Weather, Currency, RSS, Sports, Quotes/Tips — providers desacoplados,
-      sem API keys no repo, degradação graciosa offline.
+## Pendências do Info (próximas)
+- [ ] Testes interativos pelo usuário: arrastar/soltar, redimensionar, editar
+      feeds/links/eventos, settings de cada gadget (o Wayland impede automatizar).
+- [ ] Reordenação por teclado (mover ↑↓←→ no modo edição) — acessibilidade.
+- [ ] Drive Info: mostrar ponto de montagem (o sensor só expõe o rótulo).
+- [ ] Sports: mais ligas (Libertadores/Copa do Brasil — ids a confirmar) e
+      minuto ao vivo para esportes além do futebol.
 
 ## Rodada 8 — UX/UI + performance + testes finais
 - [ ] Tema (remover cores hardcoded), animações, acessibilidade completa.
