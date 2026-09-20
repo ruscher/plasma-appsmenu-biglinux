@@ -76,7 +76,31 @@ Baseado no mapeamento completo do `contents/ui/`. Locais com `arquivo:linha`.
 11. **`contentArea` com formatos inconsistentes** — HomePage/InfoPage/Search
     setam `kickoff.contentArea = root` (a página), enquanto AllAppsPage seta uma
     *view*. `Header.qml:100-107` espera `contentArea.currentItem`/`.view`. Efeito:
-    Enter na busca não lança o primeiro resultado (no-op silencioso). **PENDENTE**.
+    Enter na busca não lança o primeiro resultado. **CORRIGIDO (R3)** —
+    `SearchResultsPage` expõe `currentItem`.
+
+### 🔴 Encontrados na varredura visual (Rodada 3)
+12. **Apps/categorias/busca em branco** — `delegates/AppDelegate.qml:27-30`
+    declarava `property var model: null`, `property int index: 0`, `url`,
+    `decoration` como propriedades comuns, **sombreando** as propriedades de
+    contexto injetadas por `ListView`/`GridView`. Todo delegate via `model===null`
+    → texto/ícone vazios (grid de Apps vazio, linhas de busca em branco) e
+    `index` sempre 0 (ativar qualquer item disparava a linha 0). **CORRIGIDO** —
+    `required property var model` / `required property int index` (padrão Qt 6,
+    igual ao delegate legado); `url`/`decoration`/`description` derivados de
+    `model` com fallback.
+13. **Página de configuração nunca salvava** — `ConfigGeneral.qml` usava `id`s
+    simples em vez de aliases `cfg_<chave>`; Plasma só vincula `cfg_*`.
+    **CORRIGIDO** — reescrita com `KCM.SimpleKCM` + `cfg_` para Aparência/Apps/
+    Home/Info (inclui `showAllApplications`, grid/lista, ordenação, limites).
+14. **Sidebar de categorias mostrava separadores/linhas sem submodelo** e
+    iniciava na linha 0 (Favoritos, oculta) → conteúdo sem item destacado.
+    **CORRIGIDO** — só linhas com `modelForRow(i) !== null`; inicia na primeira
+    categoria visível; contagem de apps por categoria.
+15. **Cabeçalhos de seção gigantes** (Places/busca) —
+    `MenuSingleton.compactListDelegateContentHeight` era igual à altura da linha
+    (com padding). **CORRIGIDO** — altura de conteúdo sem padding.
+16. **`infoShowCalendar` não era lido** por nenhum cartão. **CORRIGIDO**.
 
 ## Timers / polling
 - Nenhum `Timer { repeat: true }` perigoso: os `Timer`s são one-shot (debounce de

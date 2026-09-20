@@ -29,6 +29,35 @@ completa de auditoria e planejamento.
 | 6 | `root.parent` em transição | `SearchResultsPage.qml` | ✅ corrigido (R2) |
 | 7 | 2ª instância hover→replace (sidebar de categorias) | `AllAppsPage.qml` | ✅ corrigido (R2) |
 
+## Bugs funcionais graves (Rodada 3 — varredura visual)
+
+| # | Bug | Arquivo | Status |
+|---|---|---|---|
+| A | **Apps/categorias/busca em branco** (delegate sombreava `model`/`index`) | `delegates/AppDelegate.qml` | ✅ corrigido |
+| B | Página de configuração nunca salvava (`id` em vez de `cfg_*`) | `ConfigGeneral.qml` | ✅ reescrita |
+| C | Sidebar mostrava separadores e iniciava em linha oculta | `AllAppsPage.qml` | ✅ corrigido |
+| D | Enter na busca não lançava o 1º resultado | `SearchResultsPage.qml` | ✅ corrigido |
+| E | Cabeçalhos de seção gigantes (Places/busca) | `singletons/MenuSingleton.qml` | ✅ corrigido |
+
+Verificação: screenshots de todas as abas na sessão real; contagens por
+categoria batem com `kbuildsycoca6 --menutest` (165 entradas). Detalhes no doc 13.
+
+**Correção da metodologia:** o sistema silencia todos os logs Qt
+(`/etc/environment`: `QT_LOGGING_RULES='*=false'`). As validações de warnings
+das rodadas anteriores eram cegas; com logging reabilitado no serviço, 7 classes
+de warning reais (binding loops, `undefined`→bool, `QIcon`→string) foram
+encontradas e corrigidas. Estado final: **0 warnings QML** em todas as páginas.
+
+## Estado por área (atualizado R3)
+| Área | Estado |
+|---|---|
+| Home | OK (favoritos, recentes apps/arquivos/pastas; ícones QIcon corrigidos). |
+| Apps | **OK** — todas as categorias renderizam, contagens, estado vazio, config funcional. |
+| Places | OK (cabeçalhos corrigidos). |
+| Info | OK, tema-aware, CPU real; ainda monolítico/shell (framework de gadgets pendente). |
+| Busca | OK — resultados renderizam; Enter lança o 1º. |
+| Configuração | **OK** — antes não salvava nada. |
+
 ## Correções de memória/recursos
 - ✅ Removido `Qt.createQmlObject` de `DataSource` por clique (vazamento).
 - ✅ `DataSource` fire-and-forget agora desconecta.

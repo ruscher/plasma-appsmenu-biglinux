@@ -7,6 +7,31 @@
 - `plasmawindowed` — alternativa.
 - `journalctl` / `coredumpctl` — logs e crashes. **Usados**.
 
+## ⚠️ Armadilha: logs Qt desligados no sistema
+`/etc/environment` define `QT_LOGGING_RULES='*=false'` → o `plasmashell` **não
+grava nenhum warning QML** no journal. Qualquer checagem "sem warnings" é cega
+com esse valor. Para validar de verdade, habilitar só no serviço e restaurar:
+
+```bash
+systemctl --user set-environment 'QT_LOGGING_RULES=*.debug=false;*.info=false;*.warning=true;*.critical=true'
+systemctl --user restart plasma-plasmashell.service
+journalctl --user -u plasma-plasmashell.service -f | grep org.biglinux.appsmenu
+# ao terminar:
+systemctl --user set-environment "QT_LOGGING_RULES=*=false"
+```
+O mesmo vale para `qml6`/`plasmoidviewer` neste shell (`console.log` silenciado):
+prefixar com `QT_LOGGING_RULES='*=true'`.
+
+## Como ver cada aba sem input sintético (Wayland)
+Abrir o menu por DBus e capturar tela:
+```bash
+qdbus6 org.kde.kglobalaccel /component/plasmashell org.kde.kglobalaccel.Component.invokeShortcut "activate application launcher"
+spectacle -b -n -f -o /tmp/menu.png
+```
+Para forçar uma aba/busca, aplicar um tweak **só na cópia instalada**
+(`navBar.currentIndex = N` em `onExpandedChanged`; `searchField.text = "x"` no
+Header), reiniciar o serviço, capturar, e restaurar com `rsync --delete` do repo.
+
 ## Validação já executada
 - `qmllint --bare` em **todos** os `.qml` do projeto: sem erros de sintaxe.
 - `plasmoidviewer -a <plasmoid>`: carrega sem erros/warnings de QML e permanece

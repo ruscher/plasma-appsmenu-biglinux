@@ -25,7 +25,19 @@ acessível. Efeitos visuais **nunca** acima de estabilidade.
 - Alternativa de reordenação por teclado (modo edição) para drag-and-drop.
 - Contraste WCAG AA; cor nunca como único indicador.
 
+## Aplicado na Rodada 3 (verificado por screenshot)
+- Sidebar de Apps: só categorias reais, inicia na primeira visível, **contagem
+  de apps** por categoria (secundária, com `Accessible.name` incluindo o número).
+- Estados vazios em grid/lista ("No applications here yet").
+- Cabeçalhos de seção em tamanho normal (Places/busca).
+- Info: cores via `Kirigami.Theme` (positive/highlight/neutral/negative);
+  CPU com valor real; Data & Hora respeita a configuração.
+- Home: sem ★ redundante dentro de Favoritos.
+- Página de configuração funcional e organizada por seções
+  (Aparência · Aplicativos · Home · Info).
+- Enter na busca lança o 1º resultado.
+
 ## Pendências priorizadas
-1. Corrigir Enter-para-lançar na busca (contrato `contentArea`).
-2. Trocar cores hardcoded do Info por `Kirigami.Theme`.
-3. Revisar tab order Header → conteúdo → sidebar de abas.
+1. Revisar tab order Header → conteúdo → sidebar de abas.
+2. Avaliar `showAllApplications=true` por padrão.
+3. Substituir shell no Info por APIs (parte do framework de gadgets, doc 08).

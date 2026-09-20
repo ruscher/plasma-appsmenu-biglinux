@@ -31,10 +31,9 @@ Ordem = risco. Itens marcados ✅ foram feitos nesta rodada.
 ## Próximos (ordenados)
 
 ### P2 — Consistência funcional
-5. **`kickoff.contentArea`** — padronizar o que cada página expõe para que
-   `Header.qml` (Enter lança 1º resultado) funcione em Home e Search. Definir um
-   contrato: `contentArea` sempre tem `currentItem` + `view`, ou o Header passa a
-   consultar um método da página (`activateCurrent()`).
+5. ✅ **`kickoff.contentArea`** (R3) — `SearchResultsPage` expõe `currentItem`;
+   Enter lança o 1º resultado. Home/Info seguem sem `currentItem` (Enter é no-op
+   ali, por design).
 
 ### P3 — Polling / recursos
 6. Pausar/retomar os `DataSource` do `InfoPage` conforme visibilidade

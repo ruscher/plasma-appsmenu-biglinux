@@ -27,6 +27,19 @@ aposentando a stack antiga.
 - `AbstractKickoffItemDelegate` — deref de `model.*` sem guarda no reset.
 
 ## Busca
-Ver `SearchResultsPage.qml` + `runnerModel` (KRunner). Debounce/ranking a revisar;
-Enter-para-lançar hoje é no-op na página de busca por causa do contrato
-inconsistente de `contentArea` (item 11 em `02`).
+Ver `SearchResultsPage.qml` + `runnerModel` (KRunner). Debounce/ranking a revisar.
+Enter-para-lançar corrigido na R3 (`currentItem` exposto).
+
+## Varredura "apps não aparecem" (R3)
+- Causa real: o delegate novo sombreava `model`/`index` → tudo em branco
+  (doc 02, item 12). Corrigido; verificado por screenshot em todas as categorias.
+- Cobertura: contagens da sidebar (165) = `kbuildsycoca6 --menutest` (165). Não
+  há apps do menu KDE fora das categorias nesta máquina. Apps com
+  `NoDisplay=true`/`Hidden=true` (236 dos 390 `.desktop`) são ocultos por
+  especificação FreeDesktop — correto.
+- "All Applications" continua opcional (`showAllApplications`, agora exposto e
+  funcional na configuração). Recomendação de UX: considerar ligar por padrão,
+  pois é a forma canônica de achar um app cuja categoria o usuário desconhece.
+- Duplicatas legítimas (dois `.desktop` para o mesmo app, ex.: pacote +
+  AppImage) aparecem duas vezes, como no Kickoff. Deduplicar por `Exec`/nome
+  seria heurística arriscada; não aplicado.
