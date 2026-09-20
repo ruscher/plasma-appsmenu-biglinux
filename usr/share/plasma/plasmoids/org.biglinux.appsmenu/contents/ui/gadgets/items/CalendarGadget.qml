@@ -3,12 +3,17 @@
     SPDX-License-Identifier: GPL-2.0-or-later
 
     Calendar — a compact month grid fed by Plasma's calendar backend and its
-    event plugins (holidays, astronomical events, alternate calendars). Days
-    with events get a colored dot; hovering a day shows a tooltip with the
-    event names and the alternate-calendar date. Clicking the app button opens
-    the system's default calendar application.
+    event plugins (holidays, astronomical events, alternate calendars), the
+    very same ones the Digital Clock uses. Days carrying an event get a small
+    dot under the number and a tooltip naming it; the alternate calendar shows
+    its date as a secondary number.
 
-    cfg: { plugins: [enabled .so names], weekNumbers: bool, calendarApp: "" }
+    Two things that are easy to get wrong and were:
+      * plugins are loaded by the `enabledPlugins` property —
+        populateEnabledPluginsList() only fills the config model's checkboxes;
+      * events are read from `daysModel.eventsForDate()`, not from the Calendar.
+
+    cfg: { plugins: [plugin ids], weekNumbers: bool, calendarApp: "" }
 */
 
 import QtQuick 2.15
@@ -24,22 +29,27 @@ Item {
     required property var host
 
     property date today: new Date()
-    // bumped whenever plugin data arrives, so tooltips re-read eventsForDate()
+    // bumped whenever plugin data lands, so day tooltips re-read their events
     property int dataRev: 0
+    readonly property var enabledIds: host.cfg.plugins || []
 
     Component.onCompleted: {
         host.accent = "#ef4444"
         host.settingsComponent = settings
-        plugins.populateEnabledPluginsList(host.cfg.plugins || [])
     }
     Connections {
         target: cal.host
-        function onActiveChanged() { if (cal.host.active) { cal.today = new Date(); backend.updateData() } }
-        function onCfgChanged() { plugins.populateEnabledPluginsList(cal.host.cfg.plugins || []); cal.reapply() }
+        function onActiveChanged() {
+            if (cal.host.active) { cal.today = new Date(); backend.updateData() }
+        }
     }
     Timer { interval: 60 * 60 * 1000; running: cal.host.active; repeat: true; onTriggered: cal.today = new Date() }
 
-    PlasmaCalendar.EventPluginsManager { id: plugins }
+    // Loading the plugins is what `enabledPlugins` does — see the file header.
+    PlasmaCalendar.EventPluginsManager {
+        id: plugins
+        enabledPlugins: cal.enabledIds
+    }
     PlasmaCalendar.Calendar {
         id: backend
         days: 7
@@ -48,30 +58,43 @@ Item {
         today: cal.today
         Component.onCompleted: daysModel.setPluginsManager(plugins)
     }
-    // Plugin data is fetched asynchronously; refresh dots/labels when it lands.
+    // Plugin data arrives asynchronously; refresh dots and tooltips when it does.
+    // DaysModel already follows the manager on its own — re-seating it here
+    // would reset the very data that just arrived.
     Connections {
         target: plugins
         function onDataReady() { cal.dataRev++ }
         function onSubLabelReady() { cal.dataRev++ }
-        function onPluginsChanged() { backend.daysModel.setPluginsManager(plugins); cal.reapply() }
-    }
-    function reapply() {
-        backend.daysModel.setPluginsManager(plugins)
-        backend.updateData()
-        cal.dataRev++
     }
 
-    function tooltipFor(y, m, d) {
-        cal.dataRev // dependency: re-evaluate when plugin data changes
-        let lines = []
+    // Holidays need a region; without one the plugin has nothing to show, so
+    // derive it from the system locale the first time it is switched on.
+    Loader {
+        id: holidayHelper
+        source: Qt.resolvedUrl("CalendarHolidayRegion.qml")
+        onLoaded: cal.maybeAutoDetectRegion()
+    }
+    property string autoRegion: ""
+    function maybeAutoDetectRegion() {
+        if (!holidayHelper.item) return
+        const wantsHolidays = cal.enabledIds.some(p => String(p).indexOf("holiday") >= 0)
+        if (!wantsHolidays || holidayHelper.item.hasRegion) return
+        autoRegion = holidayHelper.item.autoDetect()
+        if (autoRegion.length) backend.updateData()
+    }
+    onEnabledIdsChanged: Qt.callLater(cal.maybeAutoDetectRegion)
+
+    function eventsFor(y, m, d) {
+        cal.dataRev // dependency: re-read when plugin data changes
+        const out = []
         try {
-            const evs = backend.eventsForDate(new Date(y, m - 1, d))
+            const evs = backend.daysModel.eventsForDate(new Date(y, m - 1, d))
             for (let i = 0; i < evs.length; i++) {
-                const t = evs[i].title || evs[i].description || ""
-                if (t && lines.indexOf(t) < 0) lines.push(t)
+                const t = String(evs[i].title || evs[i].description || "")
+                if (t.length && out.indexOf(t) < 0) out.push(t)
             }
         } catch (e) {}
-        return lines
+        return out
     }
 
     ColumnLayout {
@@ -126,6 +149,10 @@ Item {
         RowLayout {
             Layout.fillWidth: true
             spacing: 0
+            Item {
+                visible: cal.host.cfg.weekNumbers === true
+                Layout.preferredWidth: weekColumn.width
+            }
             Repeater {
                 model: 7
                 delegate: PC3.Label {
@@ -142,79 +169,123 @@ Item {
         }
 
         // ── days ──
-        GridLayout {
-            id: grid
+        RowLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            columns: 7
-            rowSpacing: 0
-            columnSpacing: 0
+            spacing: 0
 
-            Repeater {
-                model: backend.daysModel
-                delegate: Item {
-                    id: cell
-                    required property var model
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
+            // week numbers
+            ColumnLayout {
+                id: weekColumn
+                visible: cal.host.cfg.weekNumbers === true
+                Layout.fillHeight: true
+                // nested Layouts default to fillWidth: true, which would let
+                // this column eat the grid's width
+                Layout.fillWidth: false
+                Layout.preferredWidth: visible ? Kirigami.Units.gridUnit * 1.2 : 0
+                Layout.maximumWidth: Layout.preferredWidth
+                spacing: 0
+                Repeater {
+                    model: cal.host.cfg.weekNumbers === true ? backend.weeksModel : null
+                    delegate: PC3.Label {
+                        required property int modelData
+                        text: modelData
+                        font.pointSize: Kirigami.Theme.smallFont.pointSize * 0.85
+                        font.italic: true
+                        opacity: 0.45
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                    }
+                }
+            }
 
-                    readonly property bool inMonth: model.isCurrent === true
-                    readonly property bool isToday: model.dayNumber === cal.today.getDate()
-                        && model.monthNumber === (cal.today.getMonth() + 1)
-                        && model.yearNumber === cal.today.getFullYear()
-                    readonly property bool hasEvents: model.containsEventItems === true
-                    readonly property bool isMajor: model.containsMajorEventItems === true
-                    readonly property string sub: model.subLabel || ""
-                    readonly property var events: cell.hovered ? cal.tooltipFor(model.yearNumber, model.monthNumber, model.dayNumber) : []
-                    readonly property bool hovered: dayHover.hovered
+            GridLayout {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                columns: 7
+                rowSpacing: 0
+                columnSpacing: 0
 
-                    Rectangle {
-                        anchors.centerIn: parent
-                        width: Math.max(16, Math.min(parent.width * 0.9, parent.height * 0.9, Kirigami.Units.gridUnit * 2.4))
-                        height: width
-                        radius: width / 2
-                        color: cell.isToday ? cal.host.accent
-                             : (cell.hovered && cell.inMonth ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.12) : "transparent")
-                        Behavior on color { ColorAnimation { duration: Kirigami.Units.shortDuration } }
+                Repeater {
+                    model: backend.daysModel
+                    delegate: Item {
+                        id: cell
+                        required property var model
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
 
-                        PC3.Label {
+                        readonly property bool inMonth: model.isCurrent === true
+                        readonly property bool isToday: model.dayNumber === cal.today.getDate()
+                            && model.monthNumber === (cal.today.getMonth() + 1)
+                            && model.yearNumber === cal.today.getFullYear()
+                        readonly property int eventCount: Number(model.eventCount) || 0
+                        readonly property bool isMajor: model.containsMajorEventItems === true
+                        readonly property string sub: String(model.subDayLabel || model.alternateDayNumber || "")
+                        readonly property string subFull: String(model.subLabel || "")
+                        readonly property bool hovered: dayHover.hovered
+                        readonly property var events: cell.hovered ? cal.eventsFor(model.yearNumber, model.monthNumber, model.dayNumber) : []
+                        readonly property real circleSize: Math.max(16, Math.min(width * 0.92, height * 0.74, Kirigami.Units.gridUnit * 2.2))
+
+                        Column {
                             anchors.centerIn: parent
-                            anchors.verticalCenterOffset: cell.sub.length ? -Math.round(parent.height * 0.10) : 0
-                            text: cell.model.dayNumber
-                            font.pointSize: Math.max(6, Math.min(Kirigami.Theme.defaultFont.pointSize, parent.height * 0.42))
-                            font.weight: cell.isToday ? Font.Bold : Font.Normal
-                            color: cell.isToday ? "white" : Kirigami.Theme.textColor
-                            opacity: cell.inMonth ? 1 : 0.3
-                        }
-                        // alternate-calendar / short sublabel as a tiny secondary number
-                        PC3.Label {
-                            visible: cell.sub.length > 0 && cell.sub.length <= 4
-                            anchors { horizontalCenter: parent.horizontalCenter; bottom: parent.bottom; bottomMargin: parent.height * 0.06 }
-                            text: cell.sub
-                            font.pointSize: Math.max(5, parent.height * 0.22)
-                            color: cell.isToday ? "white" : Kirigami.Theme.textColor
-                            opacity: cell.inMonth ? 0.6 : 0.25
-                        }
-                    }
+                            spacing: 1
 
-                    // event dot (top-right)
-                    Rectangle {
-                        visible: cell.hasEvents
-                        width: Math.max(4, Math.min(7, cell.height * 0.12)); height: width; radius: width / 2
-                        anchors { horizontalCenter: parent.horizontalCenter; top: parent.top; topMargin: Math.max(2, (parent.height - Math.min(parent.width * 0.9, parent.height * 0.9, Kirigami.Units.gridUnit * 2.4)) / 2 - width) }
-                        color: cell.isMajor ? Kirigami.Theme.negativeTextColor : cal.host.accent
-                        opacity: cell.inMonth ? 1 : 0.4
-                    }
+                            Rectangle {
+                                width: cell.circleSize
+                                height: cell.circleSize
+                                radius: width / 2
+                                color: cell.isToday ? cal.host.accent
+                                     : (cell.hovered && cell.inMonth ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.12) : "transparent")
+                                Behavior on color { ColorAnimation { duration: Kirigami.Units.shortDuration } }
 
-                    HoverHandler { id: dayHover }
-                    PC3.ToolTip.visible: cell.hovered && (cell.events.length > 0 || (cell.sub.length > 4))
-                    PC3.ToolTip.text: {
-                        let parts = []
-                        if (cell.sub.length > 4) parts.push(cell.sub)
-                        parts = parts.concat(cell.events)
-                        return parts.join("\n")
+                                PC3.Label {
+                                    anchors.centerIn: parent
+                                    anchors.verticalCenterOffset: cell.sub.length ? -Math.round(parent.height * 0.11) : 0
+                                    text: cell.model.dayNumber
+                                    font.pointSize: Math.max(6, Math.min(Kirigami.Theme.defaultFont.pointSize, parent.height * 0.42))
+                                    font.weight: cell.isToday ? Font.Bold : Font.Normal
+                                    color: cell.isToday ? "white" : Kirigami.Theme.textColor
+                                    opacity: cell.inMonth ? 1 : 0.3
+                                }
+                                // alternate-calendar date as a small secondary number
+                                PC3.Label {
+                                    visible: cell.sub.length > 0 && cell.sub.length <= 4
+                                    anchors { horizontalCenter: parent.horizontalCenter; bottom: parent.bottom; bottomMargin: parent.height * 0.05 }
+                                    text: cell.sub
+                                    font.pointSize: Math.max(5, parent.height * 0.2)
+                                    color: cell.isToday ? "white" : Kirigami.Theme.textColor
+                                    opacity: cell.inMonth ? 0.65 : 0.25
+                                }
+                            }
+
+                            // event dot, right under the day number
+                            Rectangle {
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                width: Math.max(5, Math.min(7, cell.circleSize * 0.17))
+                                height: width
+                                radius: width / 2
+                                antialiasing: true
+                                opacity: cell.eventCount > 0 ? (cell.inMonth ? 1 : 0.4) : 0
+                                color: cell.model.eventColor && String(cell.model.eventColor).length
+                                     ? String(cell.model.eventColor)
+                                     : (cell.isMajor ? cal.host.accent : Kirigami.Theme.highlightColor)
+                                Behavior on opacity { NumberAnimation { duration: Kirigami.Units.shortDuration } }
+                            }
+                        }
+
+                        HoverHandler { id: dayHover }
+                        PC3.ToolTip.visible: cell.hovered && cell.tip.length > 0
+                        PC3.ToolTip.text: cell.tip
+                        PC3.ToolTip.delay: Kirigami.Units.toolTipDelay
+                        readonly property string tip: {
+                            let parts = []
+                            if (cell.subFull.length) parts.push(cell.subFull)
+                            parts = parts.concat(cell.events)
+                            return parts.join("\n")
+                        }
                     }
-                    PC3.ToolTip.delay: Kirigami.Units.toolTipDelay
                 }
             }
         }
@@ -244,56 +315,78 @@ Item {
             property Item pluginUi: null
             property int pluginRow: -1
 
-            function persist() { host.setCfg("plugins", plugins.enabledPlugins) }
+            // A manager of its own: this one only drives the checkbox list, so
+            // toggling here never fights the gadget's own enabledPlugins binding.
+            PlasmaCalendar.EventPluginsManager {
+                id: cfgPlugins
+                Component.onCompleted: populateEnabledPluginsList(se.host.cfg.plugins || [])
+            }
+            function persist() { se.host.setCfg("plugins", cfgPlugins.enabledPlugins) }
 
             PC3.Label { text: i18n("Show on the calendar"); font.weight: Font.DemiBold }
             Repeater {
-                model: plugins.model
-                delegate: ColumnLayout {
+                model: cfgPlugins.model
+                delegate: RowLayout {
                     id: prow
                     required property var model
                     required property int index
                     Layout.fillWidth: true
-                    spacing: 0
-                    RowLayout {
+                    QQC2.CheckBox {
+                        text: prow.model.display
+                        checked: prow.model.checked === true
+                        onToggled: {
+                            prow.model.checked = checked
+                            // enabledPlugins only settles after the model updates
+                            Qt.callLater(se.persist)
+                        }
                         Layout.fillWidth: true
-                        QQC2.CheckBox {
-                            text: prow.model.display
-                            checked: prow.model.checked === true
-                            onToggled: {
-                                prow.model.checked = checked
-                                // enabledPlugins updates after the model settles
-                                Qt.callLater(se.persist)
+                    }
+                    PC3.ToolButton {
+                        icon.name: "configure"
+                        visible: !!prow.model.configUi
+                        checkable: true
+                        checked: se.pluginRow === prow.index
+                        onClicked: {
+                            if (se.pluginUi) {
+                                if (se.pluginUi.saveConfig) se.pluginUi.saveConfig()
+                                se.pluginUi.destroy(); se.pluginUi = null
                             }
-                            Layout.fillWidth: true
-                        }
-                        PC3.ToolButton {
-                            icon.name: "configure"
-                            visible: !!prow.model.configUi
-                            checkable: true
-                            checked: se.pluginRow === prow.index
-                            onClicked: {
-                                // close any open config first (saving it)
-                                if (se.pluginUi) { if (se.pluginUi.saveConfig) se.pluginUi.saveConfig(); se.pluginUi.destroy(); se.pluginUi = null }
-                                if (se.pluginRow === prow.index) { se.pluginRow = -1; Qt.callLater(function() { se.persist(); cal.reapply() }); return }
-                                const c = Qt.createComponent(prow.model.configUi)
-                                if (c.status === Component.Ready) {
-                                    se.pluginUi = c.createObject(pluginHolder, { width: pluginHolder.width })
-                                    se.pluginRow = prow.index
-                                } else {
-                                    console.warn("calendar plugin config:", c.errorString())
-                                    se.pluginRow = -1
-                                }
+                            if (se.pluginRow === prow.index) {
+                                se.pluginRow = -1
+                                Qt.callLater(se.refresh)
+                                return
                             }
-                            Accessible.name: i18n("Configure %1", prow.model.display)
-                            PC3.ToolTip.text: i18n("Configure %1", prow.model.display); PC3.ToolTip.visible: hovered
+                            const c = Qt.createComponent(prow.model.configUi)
+                            if (c.status === Component.Ready) {
+                                se.pluginUi = c.createObject(pluginHolder, { width: pluginHolder.width })
+                                se.pluginRow = prow.index
+                            } else {
+                                console.warn("calendar plugin config:", c.errorString())
+                                se.pluginRow = -1
+                            }
                         }
+                        Accessible.name: i18n("Configure %1", prow.model.display)
+                        PC3.ToolTip.text: i18n("Configure %1", prow.model.display); PC3.ToolTip.visible: hovered
                     }
                 }
             }
+
+            // What the holiday plugin is actually using right now.
             PC3.Label {
-                text: i18n("Holidays and the alternate calendar only show something after you open their ⚙ settings and pick a country/region or calendar system.")
-                opacity: 0.65; font.pointSize: Kirigami.Theme.smallFont.pointSize; wrapMode: Text.Wrap; Layout.fillWidth: true
+                readonly property var names: holidayHelper.item ? holidayHelper.item.regionNames() : []
+                visible: names.length > 0
+                text: i18n("Holidays: %1", names.join(", "))
+                opacity: 0.7
+                font.pointSize: Kirigami.Theme.smallFont.pointSize
+                wrapMode: Text.Wrap
+                Layout.fillWidth: true
+            }
+            PC3.Label {
+                text: i18n("The holiday region follows your system locale and can be changed with the ⚙ button. The alternate calendar needs a system picked there too.")
+                opacity: 0.6
+                font.pointSize: Kirigami.Theme.smallFont.pointSize
+                wrapMode: Text.Wrap
+                Layout.fillWidth: true
             }
 
             Item {
@@ -311,12 +404,17 @@ Item {
                     if (se.pluginUi && se.pluginUi.saveConfig) se.pluginUi.saveConfig()
                     if (se.pluginUi) { se.pluginUi.destroy(); se.pluginUi = null }
                     se.pluginRow = -1
-                    Qt.callLater(function() { se.persist(); cal.reapply() })
+                    Qt.callLater(se.refresh)
                 }
+            }
+            function refresh() {
+                se.persist()
+                backend.updateData()
+                cal.dataRev++
             }
             Component.onDestruction: {
                 if (se.pluginUi && se.pluginUi.saveConfig) se.pluginUi.saveConfig()
-                cal.reapply()
+                se.refresh()
             }
 
             Kirigami.Separator { Layout.fillWidth: true }
@@ -325,14 +423,14 @@ Item {
                 QQC2.CheckBox {
                     Kirigami.FormData.label: i18n("Options:")
                     text: i18n("Show week numbers")
-                    checked: host.cfg.weekNumbers === true
-                    onToggled: host.setCfg("weekNumbers", checked)
+                    checked: se.host.cfg.weekNumbers === true
+                    onToggled: se.host.setCfg("weekNumbers", checked)
                 }
                 QQC2.TextField {
                     Kirigami.FormData.label: i18n("Calendar app:")
                     placeholderText: i18n("automatic (system default)")
-                    text: host.cfg.calendarApp || ""
-                    onEditingFinished: host.setCfg("calendarApp", text.trim())
+                    text: se.host.cfg.calendarApp || ""
+                    onEditingFinished: se.host.setCfg("calendarApp", text.trim())
                 }
             }
         }
