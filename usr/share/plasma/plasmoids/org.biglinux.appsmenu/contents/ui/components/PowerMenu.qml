@@ -4,6 +4,10 @@
     SPDX-FileCopyrightText: 2024 BigLinux Team
 
     SPDX-License-Identifier: GPL-2.0-or-later
+
+    PowerMenu — a "Leave" menu button (all session/power actions) followed by
+    quick icon buttons for the configured system favorites (default:
+    log out · reboot · shut down).
 */
 
 import QtQuick 2.15
@@ -19,8 +23,9 @@ import org.kde.plasma.plasmoid 2.0
 RowLayout {
     id: root
     readonly property alias buttonImplicitWidth: buttonRepeaterRow.implicitWidth
+    // When true (narrow popup) the quick buttons are hidden; everything is in the menu.
     property bool shouldCollapseButtons: false
-    spacing: kickoff.backgroundMetrics.spacing
+    spacing: Kirigami.Units.smallSpacing
 
     Kicker.SystemModel {
         id: systemModel
@@ -33,7 +38,7 @@ RowLayout {
         function systemFavoritesContainsRow(sourceRow, sourceParent) {
             const FavoriteIdRole = sourceModel.KItemModels.KRoleNames.role("favoriteId");
             const favoriteId = sourceModel.data(sourceModel.index(sourceRow, 0, sourceParent), FavoriteIdRole);
-            return String(Plasmoid.configuration.systemFavorites).includes(favoriteId);
+            return String(Plasmoid.configuration.systemFavorites).split(",").includes(String(favoriteId));
         }
 
         function trigger(index) {
@@ -50,37 +55,65 @@ RowLayout {
         }
     }
 
+    // Quick icon buttons: the configured favorites
     FilteredModel {
         id: filteredButtonsModel
         filterRowCallback: (sourceRow, sourceParent) =>
             systemFavoritesContainsRow(sourceRow, sourceParent)
     }
 
+    // Menu: every action (so nothing is unreachable when buttons are hidden)
     FilteredModel {
-        id: filteredMenuItemsModel
-        filterRowCallback: root.shouldCollapseButtons
-            ? null
-            : (sourceRow, sourceParent) => !systemFavoritesContainsRow(sourceRow, sourceParent)
+        id: menuModel
     }
 
-    Item {
-        Layout.fillWidth: !Plasmoid.configuration.showActionButtonCaptions && Plasmoid.configuration.primaryActions === 3
+    // ── "Leave" menu button ──
+    PC3.ToolButton {
+        id: leaveButton
+
+        Accessible.role: Accessible.ButtonMenu
+        Accessible.name: text
+
+        icon.name: "system-log-out-symbolic"
+        icon.width: Kirigami.Units.iconSizes.smallMedium
+        icon.height: Kirigami.Units.iconSizes.smallMedium
+        display: PC3.AbstractButton.TextBesideIcon
+        text: i18nc("@action:button open session/power menu", "Leave")
+        down: contextMenu.status === PlasmaExtras.Menu.Open || pressed
+
+        PC3.ToolTip.text: i18n("Session and power options")
+        PC3.ToolTip.visible: hovered
+        PC3.ToolTip.delay: Kirigami.Units.toolTipDelay
+
+        Keys.onTabPressed: event => {
+            if (root.shouldCollapseButtons || buttonRepeater.count === 0) {
+                kickoff.firstHeaderItem.forceActiveFocus(Qt.TabFocusReason)
+            } else {
+                event.accepted = false
+            }
+        }
+        onPressed: contextMenu.openRelative()
     }
 
+    // ── Quick icon buttons (logout / reboot / shutdown by default) ──
     RowLayout {
         id: buttonRepeaterRow
-        enabled: !root.shouldCollapseButtons
-        opacity: !root.shouldCollapseButtons ? 1 : 0
-        spacing: parent.spacing
+        visible: !root.shouldCollapseButtons
+        spacing: root.spacing
 
         Repeater {
             id: buttonRepeater
             model: filteredButtonsModel
             delegate: PC3.ToolButton {
+                required property var model
+                required property int index
+
                 text: model.display
                 icon.name: model.decoration
-                onClicked: filteredButtonsModel.trigger(index)
+                icon.width: Kirigami.Units.iconSizes.smallMedium
+                icon.height: Kirigami.Units.iconSizes.smallMedium
                 display: Plasmoid.configuration.showActionButtonCaptions ? PC3.AbstractButton.TextBesideIcon : PC3.AbstractButton.IconOnly
+                onClicked: filteredButtonsModel.trigger(index)
 
                 Accessible.name: model.display
                 Accessible.role: Accessible.Button
@@ -90,76 +123,24 @@ RowLayout {
                 PC3.ToolTip.visible: display === PC3.AbstractButton.IconOnly && hovered
 
                 Keys.onTabPressed: event => {
-                    if (index === buttonRepeater.count - 1 && !leaveButton.shouldBeVisible) {
+                    if (index === buttonRepeater.count - 1) {
                         kickoff.firstHeaderItem.forceActiveFocus(Qt.TabFocusReason)
                     } else {
                         event.accepted = false
                     }
                 }
-                Keys.onLeftPressed: event => {
-                    if (Qt.application.layoutDirection === Qt.LeftToRight) {
-                        nextItemInFocusChain(false).forceActiveFocus(Qt.BacktabFocusReason)
-                    } else if (index < buttonRepeater.count - 1 || leaveButton.shouldBeVisible) {
-                        nextItemInFocusChain().forceActiveFocus(Qt.TabFocusReason)
-                    }
-                }
-                Keys.onRightPressed: event => {
-                    if (Qt.application.layoutDirection === Qt.RightToLeft) {
-                        nextItemInFocusChain(false).forceActiveFocus(Qt.BacktabFocusReason)
-                    } else if (index < buttonRepeater.count - 1 || leaveButton.shouldBeVisible) {
-                        nextItemInFocusChain().forceActiveFocus(Qt.TabFocusReason)
-                    }
-                }
             }
         }
-    }
-
-    Item {
-        Layout.fillWidth: !Plasmoid.configuration.showActionButtonCaptions || Plasmoid.configuration.primaryActions !== 3
-    }
-
-    PC3.ToolButton {
-        id: leaveButton
-        readonly property int currentId: Plasmoid.configuration.primaryActions
-        readonly property bool shouldBeVisible: Plasmoid.configuration.primaryActions !== 3 || root.shouldCollapseButtons
-
-        Accessible.role: Accessible.ButtonMenu
-        Accessible.name: text
-
-        icon.width: Kirigami.Units.iconSizes.smallMedium
-        icon.height: Kirigami.Units.iconSizes.smallMedium
-        icon.name: ["system-log-out", "system-shutdown", "view-more-symbolic", "view-more-symbolic"][currentId]
-        display: root.shouldCollapseButtons ? PC3.AbstractButton.TextBesideIcon : PC3.AbstractButton.IconOnly
-        text: [i18n("Leave"), i18n("Power"), i18n("More"), i18n("More")][currentId]
-        visible: shouldBeVisible
-        down: contextMenu.status === PlasmaExtras.Menu.Open || pressed
-
-        PC3.ToolTip.text: text
-        PC3.ToolTip.visible: hovered
-        PC3.ToolTip.delay: Kirigami.Units.toolTipDelay
-
-        Keys.onTabPressed: event => {
-            kickoff.firstHeaderItem.forceActiveFocus(Qt.TabFocusReason);
-        }
-        Keys.onLeftPressed: event => {
-            if (Qt.application.layoutDirection == Qt.LeftToRight) {
-                nextItemInFocusChain(false).forceActiveFocus(Qt.BacktabFocusReason)
-            }
-        }
-        Keys.onRightPressed: event => {
-            if (Qt.application.layoutDirection == Qt.RightToLeft) {
-                nextItemInFocusChain(false).forceActiveFocus(Qt.BacktabFocusReason)
-            }
-        }
-        onPressed: contextMenu.openRelative()
     }
 
     Instantiator {
-        model: filteredMenuItemsModel
+        model: menuModel
         delegate: PlasmaExtras.MenuItem {
+            required property var model
+            required property int index
             text: model.display
             icon: model.decoration
-            onClicked: filteredMenuItemsModel.trigger(index)
+            onClicked: menuModel.trigger(index)
         }
         onObjectAdded: (index, object) => contextMenu.addMenuItem(object)
         onObjectRemoved: (index, object) => contextMenu.removeMenuItem(object)
@@ -173,10 +154,10 @@ RowLayout {
             case PlasmaCore.Types.LeftEdge:
             case PlasmaCore.Types.RightEdge:
             case PlasmaCore.Types.TopEdge:
-                return PlasmaExtras.Menu.BottomPosedRightAlignedPopup;
+                return PlasmaExtras.Menu.BottomPosedLeftAlignedPopup;
             case PlasmaCore.Types.BottomEdge:
             default:
-                return PlasmaExtras.Menu.TopPosedRightAlignedPopup;
+                return PlasmaExtras.Menu.TopPosedLeftAlignedPopup;
             }
         }
     }

@@ -45,6 +45,14 @@ EmptyPage {
     // Set when the user typed a query while a transition was still running.
     property bool pendingSearch: false
 
+    // Tab to show when the menu opens: the last used one (persisted) or Home.
+    readonly property int initialTab: Plasmoid.configuration.rememberLastPage
+        ? Math.max(0, Math.min(3, Plasmoid.configuration.lastTab)) : 0
+    readonly property var tabObjectNames: ["homePage", "allAppsPage", "placesPage", "infoPage"]
+    function componentForTab(i) {
+        return [homePageComponent, allAppsPageComponent, placesPageComponent, infoPageComponent][i] ?? homePageComponent
+    }
+
     readonly property real preferredSideBarWidth: {
         if (allAppsPageItem && allAppsPageItem.sideBarItem) {
             return allAppsPageItem.sideBarItem.implicitWidth
@@ -76,7 +84,7 @@ EmptyPage {
             Layout.fillHeight: true
             focus: true
             movementTransitionsEnabled: true
-            initialItem: homePageComponent
+            initialItem: root.componentForTab(root.initialTab)
 
             // When a deferred tab switch is pending, apply it as soon as the
             // running transition finishes (see root.pendingTabIndex).
@@ -263,7 +271,7 @@ EmptyPage {
                 anchors.bottomMargin: Kirigami.Units.smallSpacing
                 spacing: Kirigami.Units.smallSpacing
 
-                property int currentIndex: 0
+                property int currentIndex: root.initialTab
 
                 Accessible.role: Accessible.PageTabList
                 Accessible.name: i18n("Main navigation tabs")
@@ -447,17 +455,21 @@ EmptyPage {
                 Item { Layout.fillHeight: true } // spacer pushes tabs to top
 
                 onCurrentIndexChanged: {
+                    Plasmoid.configuration.lastTab = currentIndex
                     if (root.header && root.header.searchText.length === 0) {
                         switchToTab(currentIndex)
                     }
                 }
 
-                // Reset to Home when menu opens
+                // When the menu opens, go to the remembered tab (or Home)
                 Connections {
                     target: kickoff
                     function onExpandedChanged() {
                         if (kickoff.expanded) {
-                            navBar.currentIndex = 0
+                            navBar.currentIndex = root.initialTab
+                            // Same tab as before: still make sure the page is shown
+                            // (e.g. after a search left the search view active).
+                            root.switchToTab(navBar.currentIndex)
                         }
                     }
                 }
@@ -475,29 +487,10 @@ EmptyPage {
 
     // ── Helper to switch content page ──
     function switchToTab(tabIndex) {
-        var targetObjectName
-        var targetComponent
-
-        switch (tabIndex) {
-            case 0:
-                targetObjectName = "homePage"
-                targetComponent = homePageComponent
-                break
-            case 1:
-                targetObjectName = "allAppsPage"
-                targetComponent = allAppsPageComponent
-                break
-            case 2:
-                targetObjectName = "placesPage"
-                targetComponent = placesPageComponent
-                break
-            case 3:
-                targetObjectName = "infoPage"
-                targetComponent = infoPageComponent
-                break
-            default:
-                return
-        }
+        if (tabIndex < 0 || tabIndex > 3)
+            return
+        const targetObjectName = root.tabObjectNames[tabIndex]
+        const targetComponent = root.componentForTab(tabIndex)
 
         if (!contentItemStackView.currentItem)
             return

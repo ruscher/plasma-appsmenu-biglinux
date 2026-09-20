@@ -324,5 +324,10 @@ PlasmoidItem {
         if (Plasmoid.hasOwnProperty("activationTogglesExpanded")) {
             Plasmoid.activationTogglesExpanded = true
         }
+        // One-time migration: configs written with the old default set of
+        // system buttons get the new default (Leave menu + logout/reboot/shutdown).
+        if (String(Plasmoid.configuration.systemFavorites) === "suspend,hibernate,reboot,shutdown") {
+            Plasmoid.configuration.systemFavorites = ["logout", "reboot", "shutdown"]
+        }
     }
 } // root

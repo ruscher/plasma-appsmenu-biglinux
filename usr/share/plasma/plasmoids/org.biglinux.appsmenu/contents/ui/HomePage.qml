@@ -147,9 +147,8 @@ EmptyPage {
                         Repeater {
                             model: root.recentModel
                             delegate: RecentItemDelegate {
-                                // Double check: hidden if it looks like a folder
-                                visible: model.index < Plasmoid.configuration.recentAppsMax && 
-                                         !(String(model.url).endsWith("/") || String(model.decoration).indexOf("folder") !== -1)
+                                // recentModel is RecentUsageModel(OnlyApps): only cap the count
+                                visible: model.index < Plasmoid.configuration.recentAppsMax
                                 itemModel: root.recentModel
                                 itemIcon: model.decoration || "application-x-executable"
                                 itemName: model.display || ""
@@ -179,11 +178,8 @@ EmptyPage {
                         Repeater {
                             model: root.recentDocsModel
                             delegate: RecentItemDelegate {
-                                // Double check: hidden if it looks like an app (.desktop) or a folder (ends with /)
-                                visible: index < Plasmoid.configuration.recentFilesMax && 
-                                         !String(model.url).includes(".desktop") && 
-                                         !String(model.url).endsWith("/") &&
-                                         !(String(model.decoration).indexOf("folder") !== -1)
+                                // recentDocsModel is RecentUsageModel(OnlyDocs): only cap the count
+                                visible: index < Plasmoid.configuration.recentFilesMax
                                 itemModel: root.recentDocsModel
                                 itemIcon: model.decoration || "text-x-generic"
                                 itemName: model.display || ""
@@ -216,9 +212,10 @@ EmptyPage {
                         Repeater {
                             model: root.recentFoldersModel
                             delegate: RecentItemDelegate {
-                                // Double check: only if it ends with / or has folder in name/icon
-                                visible: index < Plasmoid.configuration.recentFoldersMax && 
-                                         (String(model.url).endsWith("/") || String(model.decoration).indexOf("folder") !== -1)
+                                // recentFoldersModel is RecentUsageModel(OnlyFolders). The old
+                                // url/"folder"-icon heuristic hid every row (decoration is a
+                                // QIcon, urls have no trailing slash) — only cap the count.
+                                visible: index < Plasmoid.configuration.recentFoldersMax
                                 itemModel: root.recentFoldersModel
                                 itemIcon: model.decoration || "folder"
                                 itemName: model.display || ""

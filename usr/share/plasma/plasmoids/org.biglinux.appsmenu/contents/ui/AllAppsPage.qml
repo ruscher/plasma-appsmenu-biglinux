@@ -31,23 +31,33 @@ EmptyPage {
     // First sidebar row that is actually shown (skips the hidden Favorites row,
     // All Applications when disabled, and separator/top-level rows). Falls
     // back to 0 (Favorites) when the model has no categories.
+    function isCategoryRowShown(row) {
+        if (row <= 0) return false
+        if (row === 1 && !Plasmoid.configuration.showAllApplications) return false
+        return kickoff.rootModel.modelForRow(row) !== null
+    }
     function firstVisibleCategoryRow() {
         const rm = kickoff.rootModel
         for (let i = 1; i < rm.count; i++) {
-            if (i === 1 && !Plasmoid.configuration.showAllApplications)
-                continue
-            if (rm.modelForRow(i))
+            if (isCategoryRowShown(i))
                 return i
         }
         return 0
+    }
+    // Remembered category (if still valid) or the first visible one.
+    function initialCategoryRow() {
+        const last = Plasmoid.configuration.lastCategoryRow
+        if (Plasmoid.configuration.rememberLastPage && isCategoryRowShown(last))
+            return last
+        return firstVisibleCategoryRow()
     }
     function componentForRow(row) {
         if (row === 0) return contentStack.preferredFavoritesViewComponent
         if (row === 1) return contentStack.preferredAllAppsViewComponent
         return contentStack.preferredAppsViewComponent
     }
-    function selectFirstVisibleCategory() {
-        sideBar.currentIndex = firstVisibleCategoryRow()
+    function selectInitialCategory() {
+        sideBar.currentIndex = initialCategoryRow()
     }
 
     T.StackView.onActivated: {
@@ -55,15 +65,15 @@ EmptyPage {
         kickoff.contentArea = contentStack.currentItem
     }
 
-    Component.onCompleted: selectFirstVisibleCategory()
+    Component.onCompleted: selectInitialCategory()
 
     // AccessibleListView resets its view to row 0 (hidden Favorites) whenever
-    // the menu opens; re-select the first real category right after.
+    // the menu opens; re-select the remembered/first real category right after.
     Connections {
         target: kickoff
         function onExpandedChanged() {
             if (kickoff.expanded)
-                Qt.callLater(root.selectFirstVisibleCategory)
+                Qt.callLater(root.selectInitialCategory)
         }
     }
 
@@ -77,7 +87,7 @@ EmptyPage {
         Components.AccessibleListView {
             id: sideBar
             Layout.fillHeight: true
-            Layout.preferredWidth: Singletons.MenuSingleton.gridCellSize * 2
+            Layout.preferredWidth: Singletons.MenuSingleton.gridCellSize * 2 + kickoff.backgroundMetrics.leftPadding
             Layout.maximumWidth: Layout.preferredWidth
 
             focus: true
@@ -88,73 +98,47 @@ EmptyPage {
             Accessible.name: i18n("Application categories")
             Accessible.role: Accessible.List
 
-            delegate: PC3.ItemDelegate {
+            // Same look as the Places sidebar: AppDelegate in category mode, no
+            // own background (the view's rounded Highlight is the selection).
+            delegate: Delegates.AppDelegate {
                 id: categoryDelegate
-                required property var model
-                required property int index
-
-                // The sub-model of this row; null for separators and top-level
-                // items, so it doubles as "is this a real category?".
+                // Sub-model of this row; null for separators/top-level items.
                 readonly property var subModel: kickoff.rootModel.modelForRow(index)
                 readonly property int appCount: subModel ? subModel.count : 0
-                // Hide Favorites (index 0), respect the All Applications setting
-                // (index 1), and never show separator/non-category rows.
-                readonly property bool shown: index > 0
-                    && !(index === 1 && !Plasmoid.configuration.showAllApplications)
-                    && subModel !== null
+                readonly property bool shown: root.isCategoryRowShown(index)
 
-                width: sideBar.width
+                width: sideBar.view.availableWidth
                 height: shown ? implicitHeight : 0
                 visible: shown
+                enabled: shown
+                hoverEnabled: shown
 
+                isCategoryListItem: true
+                displayMode: "list"
                 text: model.display ?? ""
-                icon.name: (model.display === "WebApps" || model.display === "Web Apps")
-                           ? "/usr/share/icons/hicolor/scalable/apps/big-webapps-symbolic.svg"
-                           : (model.decoration ?? "")
-                rightPadding: countLabel.visible ? countLabel.width + Kirigami.Units.largeSpacing * 2 : Kirigami.Units.largeSpacing
-
-                highlighted: ListView.isCurrentItem
+                decoration: (model.display === "WebApps" || model.display === "Web Apps")
+                    ? "/usr/share/icons/hicolor/scalable/apps/big-webapps-symbolic.svg"
+                    : (model.decoration ?? "")
+                // App count as secondary info (never the only indicator)
+                trailingText: appCount > 0 ? String(appCount) : ""
 
                 Accessible.name: appCount > 0 ? i18nc("category name, app count", "%1 (%2)", text, appCount) : text
-                Accessible.role: Accessible.MenuItem
                 Accessible.description: i18n("Application category")
+            }
 
-                // App count badge (secondary info, never the only indicator)
-                PC3.Label {
-                    id: countLabel
-                    anchors.right: parent.right
-                    anchors.rightMargin: Kirigami.Units.largeSpacing
-                    anchors.verticalCenter: parent.verticalCenter
-                    visible: categoryDelegate.appCount > 0
-                    text: categoryDelegate.appCount
-                    font: Kirigami.Theme.smallFont
-                    color: categoryDelegate.highlighted ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.disabledTextColor
-                    Accessible.ignored: true
+            emptyText: ""
+            Keys.onRightPressed: event => {
+                if (Qt.application.layoutDirection === Qt.LeftToRight && contentStack.currentItem) {
+                    contentStack.currentItem.forceActiveFocus(Qt.TabFocusReason)
+                } else {
+                    event.accepted = false
                 }
-
-                onClicked: {
-                    sideBar.currentIndex = index
-                    sideBar.forceActiveFocus(Qt.MouseFocusReason)
-                }
-
-                hoverEnabled: true
-                onHoveredChanged: {
-                    if (hovered && shown) sideBar.currentIndex = index
-                }
-
-                Keys.onRightPressed: event => {
-                    if (Qt.application.layoutDirection === Qt.LeftToRight) {
-                        contentStack.currentItem.forceActiveFocus(Qt.TabFocusReason)
-                    } else {
-                        event.accepted = false
-                    }
-                }
-                Keys.onLeftPressed: event => {
-                    if (Qt.application.layoutDirection === Qt.RightToLeft) {
-                        contentStack.currentItem.forceActiveFocus(Qt.TabFocusReason)
-                    } else {
-                        event.accepted = false
-                    }
+            }
+            Keys.onLeftPressed: event => {
+                if (Qt.application.layoutDirection === Qt.RightToLeft && contentStack.currentItem) {
+                    contentStack.currentItem.forceActiveFocus(Qt.TabFocusReason)
+                } else {
+                    event.accepted = false
                 }
             }
 
@@ -183,12 +167,6 @@ EmptyPage {
             }
         }
 
-        // Vertical separator
-        Kirigami.Separator {
-            Layout.fillHeight: true
-            Layout.preferredWidth: 1
-        }
-
         // Content: stack of app views
         VerticalStackView {
             id: contentStack
@@ -206,10 +184,10 @@ EmptyPage {
 
             // Start directly on the first visible category so the initial view
             // matches the highlighted sidebar row (no favorites→category flash).
-            property int appsModelRow: Math.max(root.firstVisibleCategoryRow(), 0)
+            property int appsModelRow: Math.max(root.initialCategoryRow(), 0)
             readonly property Kicker.AppsModel appsModel: kickoff.rootModel.modelForRow(appsModelRow)
 
-            initialItem: root.componentForRow(root.firstVisibleCategoryRow())
+            initialItem: root.componentForRow(root.initialCategoryRow())
 
             // Safe view switching: skip redundant switches and never call
             // replace() while a transition is running (defer it). Same crash
@@ -365,6 +343,7 @@ EmptyPage {
                 function onCurrentIndexChanged() {
                     if (sideBar.currentIndex > 0) {
                         contentStack.appsModelRow = sideBar.currentIndex
+                        Plasmoid.configuration.lastCategoryRow = sideBar.currentIndex
                     }
                     if (sideBar.currentIndex === 0) {
                         contentStack.switchView(contentStack.preferredFavoritesViewComponent, contentStack.preferredFavoritesViewObjectName)

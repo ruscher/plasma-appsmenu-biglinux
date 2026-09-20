@@ -37,6 +37,8 @@ T.ItemDelegate {
 
     // "grid" or "list"
     property string displayMode: "list"
+    // Optional secondary text at the trailing edge in list mode (e.g. app count)
+    property string trailingText: ""
     property bool compact: false
     property bool isCategoryListItem: false
     property bool isSearchResult: false
@@ -379,6 +381,17 @@ T.ItemDelegate {
                         root.descriptionVisible = Qt.binding(() => descriptionLabel.visible)
                     }
                 }
+            }
+
+            PC3.Label {
+                visible: root.trailingText.length > 0
+                text: root.trailingText
+                font: Kirigami.Theme.smallFont
+                color: gridLayout.textColor
+                opacity: 0.6
+                Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                Layout.rightMargin: Kirigami.Units.smallSpacing
+                Accessible.ignored: true
             }
         }
     }

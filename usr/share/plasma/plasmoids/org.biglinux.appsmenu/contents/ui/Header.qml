@@ -21,6 +21,7 @@ import org.kde.coreaddons as KCoreAddons
 import org.kde.kcmutils as KCM
 import org.kde.config as KConfig
 import org.kde.plasma.plasmoid
+import Qt.labs.platform as Platform
 
 import "components" as Components
 
@@ -124,21 +125,35 @@ PlasmaExtras.PlasmoidHeading {
             Layout.rightMargin: kickoff.backgroundMetrics.rightPadding
             spacing: Kirigami.Units.smallSpacing
 
-            // Avatar button
+            // Avatar button — large, opens the user's home folder
             KirigamiComponents.AvatarButton {
                 id: avatar
-                visible: KConfig.KAuthorized.authorizeControlModule("kcm_users")
 
-                Layout.preferredWidth: Kirigami.Units.iconSizes.medium
-                Layout.preferredHeight: Kirigami.Units.iconSizes.medium
+                readonly property int avatarSize: Math.round(Kirigami.Units.gridUnit * 3)
+                Layout.preferredWidth: avatarSize
+                Layout.preferredHeight: avatarSize
 
+                name: kuser.fullName || kuser.loginName
                 source: kuser.faceIconUrl + "?timestamp=" + Date.now()
 
                 Accessible.name: kuser.fullName || kuser.loginName
                 Accessible.role: Accessible.Button
-                Accessible.description: i18n("Open user settings")
+                Accessible.description: i18n("Open home folder")
 
-                onClicked: KCM.KCMLauncher.openSystemSettings("kcm_users")
+                PC3.ToolTip.text: i18n("Open home folder")
+                PC3.ToolTip.visible: hovered
+                PC3.ToolTip.delay: Kirigami.Units.toolTipDelay
+
+                // Hover feedback: subtle lift
+                scale: hovered ? 1.05 : 1.0
+                Behavior on scale { NumberAnimation { duration: Kirigami.Units.shortDuration; easing.type: Easing.OutCubic } }
+
+                onClicked: {
+                    Qt.openUrlExternally(Platform.StandardPaths.writableLocation(Platform.StandardPaths.HomeLocation))
+                    if (kickoff.hideOnWindowDeactivate) {
+                        kickoff.expanded = false
+                    }
+                }
 
                 Keys.onTabPressed: event => {
                     powerButtons.forceActiveFocus(Qt.TabFocusReason)
@@ -157,6 +172,7 @@ PlasmaExtras.PlasmoidHeading {
                     Layout.fillWidth: true
                     text: kuser.fullName || kuser.loginName
                     font.weight: Font.DemiBold
+                    font.pointSize: Kirigami.Theme.defaultFont.pointSize * 1.15
                     elide: Text.ElideRight
                     textFormat: Text.PlainText
                     maximumLineCount: 1

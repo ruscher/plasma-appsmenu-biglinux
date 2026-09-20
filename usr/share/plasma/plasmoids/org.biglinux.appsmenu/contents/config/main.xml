@@ -18,8 +18,36 @@
             <default>preferred://browser,org.kde.kontact.desktop,systemsettings.desktop,org.kde.dolphin.desktop,org.kde.discover.desktop</default>
         </entry>
         <entry name="systemFavorites" type="StringList">
-            <label>List of system action favorites.</label>
-            <default>suspend,hibernate,reboot,shutdown</default>
+            <label>List of system action favorites shown as icon buttons next to the Leave menu.</label>
+            <default>logout,reboot,shutdown</default>
+        </entry>
+
+        <!-- Navigation memory -->
+        <entry name="rememberLastPage" type="Bool">
+            <label>Reopen the menu on the last used tab and category</label>
+            <default>true</default>
+        </entry>
+        <entry name="lastTab" type="Int">
+            <label>Last used tab (0 Home, 1 Apps, 2 Places, 3 Info)</label>
+            <default>0</default>
+        </entry>
+        <entry name="lastCategoryRow" type="Int">
+            <label>Last selected category row in the Apps sidebar (-1 = none)</label>
+            <default>-1</default>
+        </entry>
+
+        <!-- Info gadgets -->
+        <entry name="gadgetColumns" type="Int">
+            <label>Number of columns in the Info gadget grid (2-4)</label>
+            <default>3</default>
+        </entry>
+        <entry name="gadgetLayout" type="String">
+            <label>JSON: ordered list of gadget instances, sizes and per-gadget settings</label>
+            <default></default>
+        </entry>
+        <entry name="gadgetCache" type="String">
+            <label>JSON: cached online data (weather, currency, feeds, scores) with timestamps</label>
+            <default></default>
         </entry>
         <entry name="primaryActions" type="Int">
             <label>Which actions should be displayed in the footer: 0 = Power, 1 = Session, 2 = Custom, 3 = Power and session</label>
@@ -54,8 +82,8 @@
             <default>false</default>
         </entry>
         <entry name="showActionButtonCaptions" type="Bool">
-            <label>Whether to display captions ("shut down", "log out", etc.) for the footer action buttons</label>
-            <default>true</default>
+            <label>Whether to display captions ("shut down", "log out", etc.) for the header action buttons</label>
+            <default>false</default>
         </entry>
         <entry name="compactMode" type="Bool">
             <label>Whether to use a compact display style for list items</label>
