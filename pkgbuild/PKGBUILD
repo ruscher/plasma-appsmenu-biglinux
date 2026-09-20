@@ -1,37 +1,69 @@
 # Maintainer: Bruno Goncalves <bigbruno@gmail.com>
+# Contributor: Rafael Ruscher <rruscher@gmail.com>
 
 pkgname=plasma-appsmenu-biglinux
 pkgver=$(date +%y.%m.%d)
 pkgrel=$(date +%H%M)
+pkgdesc="BigLinux application launcher for KDE Plasma 6 (Home, Apps, Places and an Info gadget dashboard)"
 arch=('any')
-license=('GPL')
-url="https://github.com/biglinux/plasma-appsmenu-biglinux"
-pkgdesc="Fork with simplified interface for kickoff plasma Menu"
-depends=('plasma-desktop')
-source=("git+https://github.com/biglinux/plasma-appsmenu-biglinux.git")
-md5sums=(SKIP)
-if [ -e "${pkgname}.install" ];then
+url="https://github.com/ruscher/plasma-appsmenu-biglinux"
+license=('GPL-2.0-or-later')
+
+# QML-only plasmoid: nothing is compiled, the usr/ tree is installed as-is.
+depends=('plasma-workspace'     # plasmashell + org.kde.plasma.private.{kicker,mpris,clipboard}, workspace.calendar
+         'plasma5support'       # org.kde.plasma.plasma5support (DataSource)
+         'libksysguard'         # org.kde.ksysguard.sensors
+         'ksystemstats'         # sensor backend for the CPU/GPU/memory/disk/network gadgets
+         'kholidays'            # org.kde.kholidays, used by the Calendar gadget
+         'kirigami'
+         'kirigami-addons'      # org.kde.kirigamiaddons.components (Avatar)
+         'kitemmodels'
+         'knotifications'
+         'kiconthemes'
+         'kcmutils'
+         'kconfig'
+         'kcoreaddons'
+         'ksvg'
+         'qt6-declarative')
+optdepends=('xdg-utils: open the preferred calendar application from the Calendar gadget'
+            'kio: kioclient, used to launch the calendar application'
+            'libcanberra: alarm sound when a Countdown gadget finishes'
+            'ocean-sound-theme: default alarm sound used by the Countdown gadget'
+            'noto-fonts-emoji: emoji rendering in Notes, Tips and Quotes gadgets')
+
+source=("git+${url}.git#branch=main")
+sha256sums=('SKIP')
+
+if [ -e "${pkgname}.install" ]; then
     install=${pkgname}.install
 fi
 
 package() {
-    # Verify default folder
-    if [ -d "${srcdir}/${pkgname}/${pkgname}" ]; then
-        InternalDir="${srcdir}/${pkgname}/${pkgname}"
-    else
-        InternalDir="${srcdir}/${pkgname}"
+    # The BigLinux build farm may nest the checkout one level deeper.
+    local _root="${srcdir}/${pkgname}"
+    if [ -d "${_root}/${pkgname}" ]; then
+        _root="${_root}/${pkgname}"
     fi
 
-    # Copy files
-    if [ -d "${InternalDir}/usr" ]; then
-        cp -r "${InternalDir}/usr" "${pkgdir}/"
+    install -dm755 "${pkgdir}"
+
+    # Copy the payload trees that exist in the repository.
+    local _dir
+    for _dir in usr etc opt; do
+        if [ -d "${_root}/${_dir}" ]; then
+            cp -a "${_root}/${_dir}" "${pkgdir}/"
+        fi
+    done
+
+    # Documentation and license reference.
+    if [ -f "${_root}/README.md" ]; then
+        install -Dm644 "${_root}/README.md" "${pkgdir}/usr/share/doc/${pkgname}/README.md"
+    fi
+    if [ -f "${_root}/docs/architecture.md" ]; then
+        install -Dm644 "${_root}/docs/architecture.md" "${pkgdir}/usr/share/doc/${pkgname}/architecture.md"
     fi
 
-    if [ -d "${InternalDir}/etc" ]; then
-        cp -r "${InternalDir}/etc" "${pkgdir}/"
-    fi
-
-    if [ -d "${InternalDir}/opt" ]; then
-        cp -r "${InternalDir}/opt" "${pkgdir}/"
-    fi
+    # Normalize permissions: git checkouts can carry odd modes.
+    find "${pkgdir}" -type d -exec chmod 755 {} +
+    find "${pkgdir}" -type f -exec chmod 644 {} +
 }
