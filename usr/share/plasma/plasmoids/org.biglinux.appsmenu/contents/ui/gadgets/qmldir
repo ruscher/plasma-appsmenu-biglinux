@@ -1,0 +1,6 @@
+singleton GadgetRegistry 1.0 GadgetRegistry.qml
+GadgetHost 1.0 GadgetHost.qml
+GadgetGrid 1.0 GadgetGrid.qml
+GadgetGallery 1.0 GadgetGallery.qml
+GadgetSettingsDialog 1.0 GadgetSettingsDialog.qml
+GadgetTitleBar 1.0 GadgetTitleBar.qml

@@ -1,0 +1,140 @@
+/*
+    SPDX-FileCopyrightText: 2024 BigLinux Team
+    SPDX-License-Identifier: GPL-2.0-or-later
+
+    Gallery — slideshow of a local folder with crossfade + slow zoom.
+    cfg: { folder: "file:///…", interval: seconds }
+*/
+
+import QtQuick 2.15
+import QtQuick.Layouts 1.15
+import QtQuick.Controls 2.15 as QQC2
+import Qt.labs.folderlistmodel 2.15
+import Qt.labs.platform as Platform
+import org.kde.plasma.components 3.0 as PC3
+import org.kde.kirigami 2.20 as Kirigami
+import org.kde.plasma.plasma5support 2.0 as P5Support
+import "../lib/GadgetNet.js" as Net
+
+Item {
+    id: gallery
+    required property var host
+
+    readonly property string defaultFolder: Platform.StandardPaths.writableLocation(Platform.StandardPaths.PicturesLocation)
+    readonly property string folder: host.cfg.folder && host.cfg.folder.length ? host.cfg.folder : defaultFolder
+    readonly property int intervalMs: Math.max(3, host.cfg.interval || 8) * 1000
+    property int index: 0
+    property bool front: true   // which layer is on top
+
+    Component.onCompleted: { host.accent = "#06b6d4"; host.settingsComponent = settings }
+    Binding { target: gallery.host; property: "subtitle"; value: files.count > 0 ? (gallery.index + 1) + "/" + files.count : "" }
+
+    FolderListModel {
+        id: files
+        folder: gallery.folder
+        nameFilters: ["*.jpg", "*.jpeg", "*.png", "*.webp", "*.JPG", "*.JPEG", "*.PNG", "*.gif", "*.bmp", "*.avif"]
+        showDirs: false
+        sortField: FolderListModel.Name
+    }
+    function urlAt(i) { return files.count > 0 ? files.get(((i % files.count) + files.count) % files.count, "fileUrl") : "" }
+    function show(i) {
+        if (files.count === 0) return
+        index = ((i % files.count) + files.count) % files.count
+        if (front) { back.source = urlAt(index) } else { frontImg.source = urlAt(index) }
+        front = !front
+    }
+    Timer {
+        interval: gallery.intervalMs
+        running: gallery.host.active && files.count > 1 && !gallery.host.hovered
+        repeat: true
+        onTriggered: gallery.show(gallery.index + 1)
+    }
+    Connections {
+        target: files
+        function onCountChanged() { if (files.count > 0 && frontImg.source == "" ) { frontImg.source = gallery.urlAt(0); gallery.front = true } }
+    }
+
+    Rectangle {
+        anchors.fill: parent
+        radius: Kirigami.Units.largeSpacing
+        color: Qt.rgba(0, 0, 0, 0.25)
+        clip: true
+
+        component Slide : Image {
+            anchors.fill: parent
+            asynchronous: true
+            cache: false
+            fillMode: Image.PreserveAspectCrop
+            sourceSize.width: 1024
+            sourceSize.height: 1024
+            smooth: true
+            property bool shown: false
+            opacity: shown ? 1 : 0
+            scale: shown ? 1.08 : 1.0
+            Behavior on opacity { NumberAnimation { duration: 900; easing.type: Easing.InOutQuad } }
+            Behavior on scale { enabled: shown; NumberAnimation { duration: gallery.intervalMs + 900; easing.type: Easing.Linear } }
+            onStatusChanged: if (status === Image.Ready) shown = true
+            onSourceChanged: shown = false
+        }
+        Slide { id: back; z: gallery.front ? 0 : 1 }
+        Slide { id: frontImg; z: gallery.front ? 1 : 0 }
+
+        MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            onClicked: { const u = gallery.urlAt(gallery.index); if (u) Qt.openUrlExternally(u) }
+        }
+        // nav
+        RowLayout {
+            anchors { bottom: parent.bottom; right: parent.right; margins: Kirigami.Units.smallSpacing }
+            opacity: gallery.host.hovered && files.count > 1 ? 1 : 0
+            Behavior on opacity { NumberAnimation { duration: Kirigami.Units.shortDuration } }
+            PC3.ToolButton { icon.name: "go-previous"; onClicked: gallery.show(gallery.index - 1); Accessible.name: i18n("Previous picture") }
+            PC3.ToolButton { icon.name: "go-next"; onClicked: gallery.show(gallery.index + 1); Accessible.name: i18n("Next picture") }
+        }
+    }
+
+    ColumnLayout {
+        anchors.centerIn: parent
+        width: parent.width
+        visible: files.count === 0
+        Kirigami.Icon { source: "folder-pictures"; Layout.preferredWidth: Kirigami.Units.iconSizes.large; Layout.preferredHeight: Kirigami.Units.iconSizes.large; Layout.alignment: Qt.AlignHCenter; opacity: 0.45 }
+        PC3.Label { text: i18n("No pictures in this folder"); opacity: 0.7; wrapMode: Text.Wrap; horizontalAlignment: Text.AlignHCenter; Layout.fillWidth: true }
+        PC3.Button { text: i18n("Choose folder"); icon.name: "folder-open"; Layout.alignment: Qt.AlignHCenter; onClicked: gallery.host.openSettings() }
+    }
+
+    Component {
+        id: settings
+        ColumnLayout {
+            property var host
+            Kirigami.FormLayout {
+                Layout.fillWidth: true
+                RowLayout {
+                    Kirigami.FormData.label: i18n("Folder:")
+                    QQC2.TextField {
+                        id: folderField
+                        Layout.fillWidth: true
+                        text: host.cfg.folder || gallery.defaultFolder
+                        onEditingFinished: host.setCfg("folder", text.trim())
+                    }
+                    PC3.Button {
+                        icon.name: "folder-open"
+                        onClicked: folderDialog.open()
+                        Accessible.name: i18n("Browse")
+                    }
+                    Platform.FolderDialog {
+                        id: folderDialog
+                        currentFolder: host.cfg.folder || gallery.defaultFolder
+                        onAccepted: { folderField.text = String(folder); host.setCfg("folder", String(folder)) }
+                    }
+                }
+                QQC2.SpinBox {
+                    Kirigami.FormData.label: i18n("Seconds per picture:")
+                    from: 3; to: 120
+                    value: host.cfg.interval || 8
+                    onValueModified: host.setCfg("interval", value)
+                }
+            }
+        }
+    }
+}
