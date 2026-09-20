@@ -81,7 +81,10 @@ EmptyPage {
                 if (blockHoverFocusHandler.point.position === root.interceptedPosition) {
                     return;
                 }
-                root.parent.blockingHoverFocus = false
+                // root.parent can go null during a page transition; guard the deref.
+                if (root.parent && root.parent.hasOwnProperty("blockingHoverFocus")) {
+                    root.parent.blockingHoverFocus = false
+                }
             }
         }
 

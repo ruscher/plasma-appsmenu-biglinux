@@ -149,6 +149,30 @@ EmptyPage {
 
             initialItem: preferredFavoritesViewComponent
 
+            // Safe view switching: skip redundant switches and never call
+            // replace() while a transition is running (defer it). Same crash
+            // class as the outer nav — category hover changes sideBar.currentIndex
+            // and could fire replace() mid-transition (use-after-free).
+            property Component pendingViewComponent: null
+            function switchView(component, objectName) {
+                if (!component)
+                    return
+                if (currentItem && currentItem.objectName === objectName)
+                    return
+                if (busy) {
+                    pendingViewComponent = component
+                    return
+                }
+                replace(component)
+            }
+            onBusyChanged: {
+                if (!busy && pendingViewComponent) {
+                    const c = pendingViewComponent
+                    pendingViewComponent = null
+                    replace(c)
+                }
+            }
+
             // Favorites as list
             Component {
                 id: favoritesListViewComponent
@@ -219,8 +243,13 @@ EmptyPage {
                     model: contentStack.appsModel.sections
                     onHideSectionViewRequested: index => {
                         contentStack.pop();
-                        contentStack.currentItem.view.positionViewAtIndex(index, ListView.Beginning);
-                        contentStack.currentItem.currentIndex = index;
+                        // Guard: the revealed item may be null mid-transition or
+                        // may not expose a `view` (avoid deref crash).
+                        const it = contentStack.currentItem;
+                        if (it && it.view) {
+                            it.view.positionViewAtIndex(index, ListView.Beginning);
+                            it.currentIndex = index;
+                        }
                     }
                 }
             }
@@ -255,17 +284,17 @@ EmptyPage {
 
             onPreferredFavoritesViewComponentChanged: {
                 if (sideBar.currentIndex === 0) {
-                    contentStack.replace(contentStack.preferredFavoritesViewComponent)
+                    contentStack.switchView(contentStack.preferredFavoritesViewComponent, contentStack.preferredFavoritesViewObjectName)
                 }
             }
             onPreferredAllAppsViewComponentChanged: {
                 if (sideBar.currentIndex === 1) {
-                    contentStack.replace(contentStack.preferredAllAppsViewComponent)
+                    contentStack.switchView(contentStack.preferredAllAppsViewComponent, contentStack.preferredAllAppsViewObjectName)
                 }
             }
             onPreferredAppsViewComponentChanged: {
                 if (sideBar.currentIndex > 1) {
-                    contentStack.replace(contentStack.preferredAppsViewComponent)
+                    contentStack.switchView(contentStack.preferredAppsViewComponent, contentStack.preferredAppsViewObjectName)
                 }
             }
 
@@ -275,15 +304,12 @@ EmptyPage {
                     if (sideBar.currentIndex > 0) {
                         contentStack.appsModelRow = sideBar.currentIndex
                     }
-                    if (sideBar.currentIndex === 0
-                        && contentStack.currentItem.objectName !== contentStack.preferredFavoritesViewObjectName) {
-                        contentStack.replace(contentStack.preferredFavoritesViewComponent)
-                    } else if (sideBar.currentIndex === 1
-                        && contentStack.currentItem.objectName !== contentStack.preferredAllAppsViewObjectName) {
-                        contentStack.replace(contentStack.preferredAllAppsViewComponent)
-                    } else if (sideBar.currentIndex > 1
-                        && contentStack.currentItem.objectName !== contentStack.preferredAppsViewObjectName) {
-                        contentStack.replace(contentStack.preferredAppsViewComponent)
+                    if (sideBar.currentIndex === 0) {
+                        contentStack.switchView(contentStack.preferredFavoritesViewComponent, contentStack.preferredFavoritesViewObjectName)
+                    } else if (sideBar.currentIndex === 1) {
+                        contentStack.switchView(contentStack.preferredAllAppsViewComponent, contentStack.preferredAllAppsViewObjectName)
+                    } else if (sideBar.currentIndex > 1) {
+                        contentStack.switchView(contentStack.preferredAppsViewComponent, contentStack.preferredAppsViewObjectName)
                     }
                 }
             }

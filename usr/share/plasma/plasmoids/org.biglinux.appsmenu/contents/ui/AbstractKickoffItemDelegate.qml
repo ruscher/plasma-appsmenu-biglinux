@@ -94,10 +94,11 @@ T.ItemDelegate {
 
     spacing: KickoffSingleton.fontMetrics.descent
 
-    enabled: !isSeparator && !model.disabled
+    // Guard model access: `model` can be null during model reset/reuse.
+    enabled: !isSeparator && !(model && model.disabled === true)
     hoverEnabled: false
 
-    text: model.name ?? model.displayWrapped ?? model.display
+    text: model ? (model.name ?? model.displayWrapped ?? model.display) : ""
     Accessible.role: Accessible.ListItem
     Accessible.description: root.description !== root.text ? root.description : ""
     Accessible.onPressAction: {

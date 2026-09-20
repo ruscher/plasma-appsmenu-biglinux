@@ -72,6 +72,8 @@ KickoffGridView {
     }
 
     Component.onCompleted: {
+        if (!model)
+            return;
         for (let i = 0; i < model.count; i++) {
             if (model.data(model.index([i], 0), Qt.DisplayRole) === root.currentSection) {
                 view.positionViewAtIndex(i, ListView.Beginning);
