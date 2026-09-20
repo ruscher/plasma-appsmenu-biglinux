@@ -1,0 +1,10 @@
+AccessibleGridView 1.0 AccessibleGridView.qml
+AccessibleListView 1.0 AccessibleListView.qml
+AnimatedStackView 1.0 AnimatedStackView.qml
+DragDropArea 1.0 DragDropArea.qml
+FavoriteIndicator 1.0 FavoriteIndicator.qml
+OnboardingOverlay 1.0 OnboardingOverlay.qml
+PowerMenu 1.0 PowerMenu.qml
+SectionCard 1.0 SectionCard.qml
+SectionCollapser 1.0 SectionCollapser.qml
+SmartSection 1.0 SmartSection.qml

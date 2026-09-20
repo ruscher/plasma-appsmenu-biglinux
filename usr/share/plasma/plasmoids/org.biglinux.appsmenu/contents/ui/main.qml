@@ -21,6 +21,7 @@ import org.kde.plasma.private.kicker 0.1 as Kicker
 import org.kde.kirigami 2.20 as Kirigami
 
 import "code/tools.js" as Tools
+import "singletons" as Singletons
 
 PlasmoidItem {
     id: kickoff
@@ -94,11 +95,22 @@ PlasmoidItem {
 
     readonly property Kicker.RecentUsageModel recentUsageModel: Kicker.RecentUsageModel {
         favoritesModel: rootModel.favoritesModel
+        Component.onCompleted: shownItems = 1 // Applications
     }
 
     readonly property Kicker.RecentUsageModel frequentUsageModel: Kicker.RecentUsageModel {
         favoritesModel: rootModel.favoritesModel
         ordering: 1 // Popular / Frequently Used
+    }
+
+    readonly property Kicker.RecentUsageModel recentDocsModel: Kicker.RecentUsageModel {
+        favoritesModel: rootModel.favoritesModel
+        Component.onCompleted: shownItems = 2 // Documents
+    }
+
+    readonly property Kicker.RecentUsageModel recentFoldersModel: Kicker.RecentUsageModel {
+        favoritesModel: rootModel.favoritesModel
+        Component.onCompleted: shownItems = 3 // Folders
     }
     //END
 
@@ -111,12 +123,16 @@ PlasmoidItem {
     // "Cannot assign QObject* to TextField_QMLTYPE_8*"
     property Item searchField: null
 
-    // Set in FullRepresentation.qml, ApplicationPage.qml, PlacesPage.qml
-    property Item sideBar: null // is null when searching
+    // Set in FullRepresentation.qml, AllAppsPage.qml, PlacesPage.qml
+    property Item sideBar: null // is null when searching or on HomePage
     property Item contentArea: null // is searchView when searching
 
-    // Set in NormalPage.qml
+    // Set in FullRepresentation.qml
     property Item footer: null
+
+    // First and last focusable items in the header (for Tab loop from search results)
+    readonly property Item firstHeaderItem: searchField
+    readonly property Item lastHeaderItem: header
 
     // True when central pane (and header) LayoutMirroring diverges from global
     // LayoutMirroring, in order to achieve the desired sidebar position
@@ -139,26 +155,16 @@ PlasmoidItem {
         imagePath: Plasmoid.formFactor === PlasmaCore.Types.Planar ? "widgets/background" : "dialogs/background"
     }
 
-    // This is here rather than in the singleton with the other metrics items
-    // because the list delegate's height depends on a configuration setting
-    // and the singleton can't access those
-    readonly property real listDelegateHeight: listDelegate.height
-    KickoffListDelegate {
-        id: listDelegate
-        visible: false
-        enabled: false
-        model: null
-        index: -1
-        text: "asdf"
-        url: ""
-        decoration: "start-here-kde"
-        description: "asdf"
-        action: null
-        indicator: null
+    // List delegate height calculated from MenuSingleton metrics
+    readonly property real listDelegateHeight: {
+        var iconSize = Plasmoid.configuration.compactMode ? Kirigami.Units.iconSizes.small : Kirigami.Units.iconSizes.medium;
+        var vertPadding = Plasmoid.configuration.compactMode ? (Kirigami.Units.mediumSpacing * 2) : (Kirigami.Units.smallSpacing * 2);
+        var textHeight = Plasmoid.configuration.compactMode ? Singletons.MenuSingleton.fontMetrics.height : (Singletons.MenuSingleton.fontMetrics.height * 2);
+        return Math.max(iconSize, textHeight) + vertPadding;
     }
 
     // Used to show smaller Kickoff on small screens
-    readonly property int minimumGridRowCount: Math.min(Screen.desktopAvailableWidth, Screen.desktopAvailableHeight) * Screen.devicePixelRatio < KickoffSingleton.gridCellSize * 4 + (fullRepresentationItem ? fullRepresentationItem.normalPage.preferredSideBarWidth : KickoffSingleton.gridCellSize * 2) ? 2 : 4
+    readonly property int minimumGridRowCount: Math.min(Screen.desktopAvailableWidth, Screen.desktopAvailableHeight) * Screen.devicePixelRatio < Singletons.MenuSingleton.gridCellSize * 4 + (fullRepresentationItem ? fullRepresentationItem.preferredSideBarWidth : Singletons.MenuSingleton.gridCellSize * 2) ? 2 : 4
     //END
 
     Plasmoid.icon: Plasmoid.configuration.icon

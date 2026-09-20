@@ -1,0 +1,316 @@
+/*
+    SPDX-FileCopyrightText: 2021 Noah Davis <noahadvs@gmail.com>
+    SPDX-FileCopyrightText: 2024 BigLinux Team
+
+    SPDX-License-Identifier: GPL-2.0-or-later
+
+    AllAppsPage — Categories sidebar + application content area
+*/
+
+import QtQuick 2.15
+import QtQuick.Layouts 1.15
+import QtQuick.Templates 2.15 as T
+import QtQml 2.15
+import org.kde.plasma.private.kicker 0.1 as Kicker
+import org.kde.plasma.components 3.0 as PC3
+import org.kde.kirigami 2.20 as Kirigami
+import org.kde.plasma.plasmoid 2.0
+import "singletons" as Singletons
+import "delegates" as Delegates
+import "components" as Components
+
+EmptyPage {
+    id: root
+
+    Accessible.name: i18n("All applications")
+    Accessible.role: Accessible.Pane
+
+    readonly property Item sideBarItem: sideBar
+    readonly property Item contentAreaItem: contentStack
+
+    T.StackView.onActivated: {
+        kickoff.sideBar = sideBar
+        kickoff.contentArea = contentStack.currentItem
+    }
+
+    contentItem: RowLayout {
+        spacing: 0
+
+        LayoutMirroring.enabled: kickoff.sideBarOnRight
+        LayoutMirroring.childrenInherit: true
+
+        // Category Sidebar
+        Components.AccessibleListView {
+            id: sideBar
+            Layout.fillHeight: true
+            Layout.preferredWidth: Singletons.MenuSingleton.gridCellSize * 2
+            Layout.maximumWidth: Layout.preferredWidth
+
+            focus: true
+            model: kickoff.rootModel
+
+            section.property: ""
+
+            Accessible.name: i18n("Application categories")
+            Accessible.role: Accessible.List
+
+            delegate: PC3.ItemDelegate {
+                id: categoryDelegate
+                width: sideBar.width
+                height: visible ? implicitHeight : 0
+                // Hide Favorites (index 0) and respect Plasmoid config for All Applications (index 1)
+                visible: index > 0 && !(index === 1 && !Plasmoid.configuration.showAllApplications)
+
+                text: model.display
+                icon.name: (model.display === "WebApps" || model.display === "Web Apps") 
+                           ? "/usr/share/icons/hicolor/scalable/apps/big-webapps-symbolic.svg" 
+                           : model.decoration
+
+                highlighted: ListView.isCurrentItem
+
+                Accessible.name: model.display
+                Accessible.role: Accessible.MenuItem
+                Accessible.description: i18n("Application category")
+
+                onClicked: {
+                    sideBar.currentIndex = index
+                    sideBar.forceActiveFocus(Qt.MouseFocusReason)
+                }
+
+                hoverEnabled: true
+                onHoveredChanged: {
+                    if (hovered) sideBar.currentIndex = index
+                }
+
+                Keys.onRightPressed: event => {
+                    if (Qt.application.layoutDirection === Qt.LeftToRight) {
+                        contentStack.currentItem.forceActiveFocus(Qt.TabFocusReason)
+                    } else {
+                        event.accepted = false
+                    }
+                }
+                Keys.onLeftPressed: event => {
+                    if (Qt.application.layoutDirection === Qt.RightToLeft) {
+                        contentStack.currentItem.forceActiveFocus(Qt.TabFocusReason)
+                    } else {
+                        event.accepted = false
+                    }
+                }
+            }
+
+            Keys.onDownPressed: {
+                let nextIndex = currentIndex + 1;
+                while (nextIndex < count) {
+                    const item = itemAtIndex(nextIndex);
+                    if (item && item.visible) break;
+                    nextIndex++;
+                }
+                if (nextIndex < count) {
+                    currentIndex = nextIndex;
+                }
+            }
+
+            Keys.onUpPressed: {
+                let prevIndex = currentIndex - 1;
+                while (prevIndex >= 0) {
+                    const item = itemAtIndex(prevIndex);
+                    if (item && item.visible) break;
+                    prevIndex--;
+                }
+                if (prevIndex >= 0) {
+                    currentIndex = prevIndex;
+                }
+            }
+        }
+
+        // Vertical separator
+        Kirigami.Separator {
+            Layout.fillHeight: true
+            Layout.preferredWidth: 1
+        }
+
+        // Content: stack of app views
+        VerticalStackView {
+            id: contentStack
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+
+            focus: true
+
+            readonly property string preferredFavoritesViewObjectName: Plasmoid.configuration.favoritesDisplay === 0 ? "favoritesGridView" : "favoritesListView"
+            readonly property Component preferredFavoritesViewComponent: Plasmoid.configuration.favoritesDisplay === 0 ? favoritesGridViewComponent : favoritesListViewComponent
+            readonly property string preferredAllAppsViewObjectName: Plasmoid.configuration.applicationsDisplay === 0 ? "listOfGridsView" : "applicationsListView"
+            readonly property Component preferredAllAppsViewComponent: Plasmoid.configuration.applicationsDisplay === 0 ? listOfGridsViewComponent : applicationsListViewComponent
+            readonly property string preferredAppsViewObjectName: Plasmoid.configuration.applicationsDisplay === 0 ? "applicationsGridView" : "applicationsListView"
+            readonly property Component preferredAppsViewComponent: Plasmoid.configuration.applicationsDisplay === 0 ? applicationsGridViewComponent : applicationsListViewComponent
+
+            property int appsModelRow: 0
+            readonly property Kicker.AppsModel appsModel: kickoff.rootModel.modelForRow(appsModelRow)
+
+            initialItem: preferredFavoritesViewComponent
+
+            // Favorites as list
+            Component {
+                id: favoritesListViewComponent
+                Components.AccessibleListView {
+                    id: favoritesListView
+                    objectName: "favoritesListView"
+                    mainContentView: true
+                    focus: true
+                    model: kickoff.rootModel.favoritesModel
+
+                    Components.DragDropArea {
+                        z: -1
+                        parent: favoritesListView
+                        anchors.fill: parent
+                        targetView: favoritesListView.view
+                        scrollUpMargin: favoritesListView.header.height * 2
+                        scrollDownMargin: favoritesListView.footer.height * 2
+                    }
+                }
+            }
+
+            // Favorites as grid
+            Component {
+                id: favoritesGridViewComponent
+                Components.AccessibleGridView {
+                    id: favoritesGridView
+                    objectName: "favoritesGridView"
+                    focus: true
+                    model: kickoff.rootModel.favoritesModel
+
+                    Components.DragDropArea {
+                        z: -1
+                        parent: favoritesGridView
+                        anchors.fill: parent
+                        targetView: favoritesGridView.view
+                        scrollUpMargin: favoritesGridView.header.height * 2
+                        scrollDownMargin: favoritesGridView.footer.height * 2
+                    }
+                }
+            }
+
+            // All apps flat list
+            Component {
+                id: applicationsListViewComponent
+                Components.AccessibleListView {
+                    id: applicationsListView
+                    objectName: "applicationsListView"
+                    mainContentView: true
+                    model: contentStack.appsModel
+                    section.property: model && model.description === "KICKER_ALL_MODEL" ? "group" : ""
+                    section.criteria: ViewSection.FirstCharacter
+                    hasSectionView: contentStack.appsModelRow === 1
+
+                    onShowSectionViewRequested: sectionName => {
+                        contentStack.push(applicationsSectionViewComponent, {
+                            "currentSection": sectionName,
+                            "parentView": applicationsListView
+                        });
+                    }
+                }
+            }
+
+            // Section jump view
+            Component {
+                id: applicationsSectionViewComponent
+                SectionView {
+                    id: sectionView
+                    model: contentStack.appsModel.sections
+                    onHideSectionViewRequested: index => {
+                        contentStack.pop();
+                        contentStack.currentItem.view.positionViewAtIndex(index, ListView.Beginning);
+                        contentStack.currentItem.currentIndex = index;
+                    }
+                }
+            }
+
+            // Apps as grid
+            Component {
+                id: applicationsGridViewComponent
+                Components.AccessibleGridView {
+                    id: applicationsGridView
+                    objectName: "applicationsGridView"
+                    model: contentStack.appsModel
+                }
+            }
+
+            // All apps as grid-of-grids
+            Component {
+                id: listOfGridsViewComponent
+                ListOfGridsView {
+                    id: listOfGridsView
+                    objectName: "listOfGridsView"
+                    mainContentView: true
+                    gridModel: contentStack.appsModel
+
+                    onShowSectionViewRequested: sectionName => {
+                        contentStack.push(applicationsSectionViewComponent, {
+                            currentSection: sectionName,
+                            parentView: listOfGridsView
+                        });
+                    }
+                }
+            }
+
+            onPreferredFavoritesViewComponentChanged: {
+                if (sideBar.currentIndex === 0) {
+                    contentStack.replace(contentStack.preferredFavoritesViewComponent)
+                }
+            }
+            onPreferredAllAppsViewComponentChanged: {
+                if (sideBar.currentIndex === 1) {
+                    contentStack.replace(contentStack.preferredAllAppsViewComponent)
+                }
+            }
+            onPreferredAppsViewComponentChanged: {
+                if (sideBar.currentIndex > 1) {
+                    contentStack.replace(contentStack.preferredAppsViewComponent)
+                }
+            }
+
+            Connections {
+                target: sideBar
+                function onCurrentIndexChanged() {
+                    if (sideBar.currentIndex > 0) {
+                        contentStack.appsModelRow = sideBar.currentIndex
+                    }
+                    if (sideBar.currentIndex === 0
+                        && contentStack.currentItem.objectName !== contentStack.preferredFavoritesViewObjectName) {
+                        contentStack.replace(contentStack.preferredFavoritesViewComponent)
+                    } else if (sideBar.currentIndex === 1
+                        && contentStack.currentItem.objectName !== contentStack.preferredAllAppsViewObjectName) {
+                        contentStack.replace(contentStack.preferredAllAppsViewComponent)
+                    } else if (sideBar.currentIndex > 1
+                        && contentStack.currentItem.objectName !== contentStack.preferredAppsViewObjectName) {
+                        contentStack.replace(contentStack.preferredAppsViewComponent)
+                    }
+                }
+            }
+
+            Connections {
+                target: kickoff
+                function onExpandedChanged() {
+                    if (kickoff.expanded && contentStack.currentItem) {
+                        contentStack.currentItem.forceActiveFocus()
+                    }
+                }
+            }
+        }
+    }
+
+    Binding {
+        target: kickoff
+        property: "sideBar"
+        value: sideBar
+        when: root.T.StackView.status === T.StackView.Active && root.visible
+        restoreMode: Binding.RestoreBinding
+    }
+    Binding {
+        target: kickoff
+        property: "contentArea"
+        value: contentStack.currentItem
+        when: root.T.StackView.status === T.StackView.Active && root.visible
+        restoreMode: Binding.RestoreBinding
+    }
+}

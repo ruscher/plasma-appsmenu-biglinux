@@ -1,11 +1,7 @@
 /*
     SPDX-FileCopyrightText: 2011 Martin Gräßlin <mgraesslin@kde.org>
-    SPDX-FileCopyrightText: 2012 Gregor Taetzner <gregor@freenet.de>
-    SPDX-FileCopyrightText: 2012 Marco Martin <mart@kde.org>
-    SPDX-FileCopyrightText: 2013 2014 David Edmundson <davidedmundson@kde.org>
-    SPDX-FileCopyrightText: 2014 Sebastian Kügler <sebas@kde.org>
-    SPDX-FileCopyrightText: 2021 Mikel Johnson <mikel5764@gmail.com>
     SPDX-FileCopyrightText: 2021 Noah Davis <noahadvs@gmail.com>
+    SPDX-FileCopyrightText: 2024 BigLinux Team
 
     SPDX-License-Identifier: GPL-2.0-or-later
 */
@@ -16,11 +12,15 @@ import QtQml 2.15
 import org.kde.plasma.plasmoid 2.0
 import org.kde.kirigami 2.20 as Kirigami
 import org.kde.plasma.extras 2.0 as PlasmaExtras
+import org.kde.plasma.components 3.0 as PC3
+
+import "components" as Components
+import "delegates" as Delegates
+import "singletons" as Singletons
 
 EmptyPage {
     id: root
 
-    // kickoff is Kickoff.qml
     leftPadding: -kickoff.backgroundMetrics.leftPadding
     rightPadding: -kickoff.backgroundMetrics.rightPadding
     topPadding: 0
@@ -34,41 +34,28 @@ EmptyPage {
     Layout.preferredWidth: Math.max(implicitWidth, width)
     Layout.preferredHeight: Math.max(implicitHeight, height)
 
-    property alias normalPage: normalPage
     property bool blockingHoverFocus: false
+    property Item allAppsPageItem: null
 
-    /* NOTE: Important things to know about keyboard input handling:
-     *
-     * - Key events are passed up to parent items until the end is reached.
-     * Be mindful of this when using `Keys.forwardTo`.
-     *
-     * - Keys defaults to BeforeItem while KeyNavigation defaults to AfterItem.
-     *
-     * - When Keys and KeyNavigation are using the same priority, it seems like
-     * the one declared first in the QML file gets priority over the other.
-     *
-     * - Except for Keys.onPressed, all Keys.on*Pressed signals automatically
-     * set `event.accepted = true`.
-     *
-     * - If you do `item.forceActiveFocus()` and `item` is a focus scope, the
-     * children of `item` won't necessarily get focus. It seems like
-     * `forceActiveFocus()` is better for forcing a specific thing to be focused
-     * while KeyNavigation is better at passing focus down to children of the
-     * thing you want to focus when dealing with focus scopes.
-     *
-     * - KeyNavigation uses BacktabFocusReason (TabFocusReason if mirrored) for left,
-     * TabFocusReason (BacktabFocusReason if mirrored) for right,
-     * BacktabFocusReason for up and TabFocusReason for down.
-     *
-     * - KeyNavigation does not seem to respect dynamic changes to focus chain
-     * rules in the reverse direction, which can lead to confusing results.
-     * It is therefore safer to use Keys for items whose position in the Tab
-     * order must be changed on demand. (Tested with Qt 5.15.8 on X11.)
-     */
+    // Latest tab requested while a page transition is still animating. Applied
+    // once the StackView stops being busy, so we never call replace() mid-
+    // transition (that destroys items still referenced by the running animation,
+    // causing a use-after-free crash inside libQt6Quick / plasmashell).
+    property int pendingTabIndex: -1
+    // Set when the user typed a query while a transition was still running.
+    property bool pendingSearch: false
 
+    readonly property real preferredSideBarWidth: {
+        if (allAppsPageItem && allAppsPageItem.sideBarItem) {
+            return allAppsPageItem.sideBarItem.implicitWidth
+        }
+        return Singletons.MenuSingleton.gridCellSize * 2
+    }
+
+    // ── HEADER (always on top) ──
     header: Header {
         id: header
-        preferredNameAndIconWidth: normalPage.preferredSideBarWidth
+        preferredNameAndIconWidth: root.preferredSideBarWidth
         Binding {
             target: kickoff
             property: "header"
@@ -77,125 +64,452 @@ EmptyPage {
         }
     }
 
-    contentItem: VerticalStackView {
-        id: contentItemStackView
-        focus: true
-        movementTransitionsEnabled: true
-        // Not using a component to prevent it from being destroyed
-        initialItem: NormalPage {
-            id: normalPage
-            objectName: "normalPage"
-        }
+    // ── CONTENT: Main area + Right Navigation Sidebar ──
+    contentItem: RowLayout {
+        id: mainRow
+        spacing: 0
 
-        Component {
-            id: searchViewComponent
-            KickoffListView {
-                id: searchView
-                objectName: "searchView"
-                mainContentView: true
-                // Forces the function be re-run every time runnerModel.count changes.
-                // This is absolutely necessary to make the search view work reliably.
-                model: kickoff.runnerModel.count ? kickoff.runnerModel.modelForRow(0) : null
-                delegate: KickoffListDelegate {
-                    width: view.availableWidth
-                    isSearchResult: true
-                }
-                activeFocusOnTab: true
-                property var interceptedPosition: null
-                Keys.onTabPressed: event => {
-                    kickoff.firstHeaderItem.forceActiveFocus(Qt.TabFocusReason);
-                }
-                Keys.onBacktabPressed: event => {
-                    kickoff.lastHeaderItem.forceActiveFocus(Qt.BacktabFocusReason);
-                }
-                T.StackView.onActivated: {
-                    kickoff.sideBar = null
-                    kickoff.contentArea = searchView
-                }
+        // ─── CENTRAL CONTENT STACK ───
+        VerticalStackView {
+            id: contentItemStackView
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            focus: true
+            movementTransitionsEnabled: true
+            initialItem: homePageComponent
 
-                Connections {
-                    target: blockHoverFocusHandler
-                    enabled: blockHoverFocusHandler.enabled && !searchView.interceptedPosition
-                    function onPointChanged() {
-                        searchView.interceptedPosition = blockHoverFocusHandler.point.position
-                    }
-                }
-
-                Connections {
-                    target: blockHoverFocusHandler
-                    enabled: blockHoverFocusHandler.enabled && searchView.interceptedPosition && root.blockingHoverFocus
-                    function onPointChanged() {
-                        if (blockHoverFocusHandler.point.position === searchView.interceptedPosition) {
-                            return;
-                        }
-                        root.blockingHoverFocus = false
-                    }
-                }
-
-                HoverHandler {
-                    id: blockHoverFocusHandler
-                    enabled: !contentItemStackView.busy && (!searchView.interceptedPosition || root.blockingHoverFocus)
-                }
-
-                Loader {
-                    anchors.centerIn: searchView.view
-                    width: searchView.view.width - (Kirigami.Units.gridUnit * 4)
-
-                    active: searchView.view.count === 0
-                    visible: active
-                    asynchronous: true
-
-                    sourceComponent: PlasmaExtras.PlaceholderMessage {
-                        id: emptyHint
-
-                        iconName: "edit-none"
-                        opacity: 0
-                        text: i18nc("@info:status", "No matches")
-
-                        Connections {
-                            target: kickoff.runnerModel
-                            function onQueryFinished() {
-                                showAnimation.restart()
-                            }
-                        }
-
-                        NumberAnimation {
-                            id: showAnimation
-                            duration: Kirigami.Units.longDuration
-                            easing.type: Easing.OutCubic
-                            property: "opacity"
-                            target: emptyHint
-                            to: 1
-                        }
-                    }
-                }
-            }
-        }
-
-        Keys.priority: Keys.AfterItem
-        // This is here rather than root because events are implicitly forwarded
-        // to parent items. Don't want to send multiple events to searchField.
-        Keys.forwardTo: kickoff.searchField
-
-        Connections {
-            target: root.header
-            function onSearchTextChanged() {
-                if (root.header.searchText.length === 0 && contentItemStackView.currentItem.objectName !== "normalPage") {
-                    root.blockingHoverFocus = false
-                    contentItemStackView.reverseTransitions = true
-                    contentItemStackView.replace(normalPage)
-                } else if (root.header.searchText.length > 0) {
-                    if (contentItemStackView.currentItem.objectName !== "searchView") {
+            // When a deferred tab switch is pending, apply it as soon as the
+            // running transition finishes (see root.pendingTabIndex).
+            onBusyChanged: {
+                if (busy)
+                    return
+                // Re-evaluate the current search state first: if the user is
+                // typing, search wins over a pending tab switch.
+                if (root.pendingSearch || (root.header && root.header.searchText.length > 0
+                        && (!currentItem || currentItem.objectName !== "searchView"))) {
+                    root.pendingSearch = false
+                    if (root.header && root.header.searchText.length > 0) {
                         contentItemStackView.reverseTransitions = false
                         contentItemStackView.replace(searchViewComponent)
-                    } else {
-                        root.blockingHoverFocus = true
-                        contentItemStackView.contentItem.interceptedPosition = null
-                        contentItemStackView.contentItem.currentIndex = 0
+                        return
+                    }
+                }
+                if (root.pendingTabIndex >= 0) {
+                    const t = root.pendingTabIndex
+                    root.pendingTabIndex = -1
+                    root.switchToTab(t)
+                }
+            }
+
+            Component {
+                id: homePageComponent
+                HomePage {
+                    id: homePage
+                    objectName: "homePage"
+                    favoritesModel: kickoff.rootModel.favoritesModel
+                    recentModel: kickoff.recentUsageModel
+                    frequentModel: kickoff.frequentUsageModel
+                    recentDocsModel: kickoff.recentDocsModel
+                    recentFoldersModel: kickoff.recentFoldersModel
+                }
+            }
+
+            Component {
+                id: allAppsPageComponent
+                AllAppsPage {
+                    id: allAppsPage
+                    objectName: "allAppsPage"
+                    Component.onCompleted: root.allAppsPageItem = allAppsPage
+                    Component.onDestruction: {
+                        if (root.allAppsPageItem === allAppsPage)
+                            root.allAppsPageItem = null
+                    }
+                }
+            }
+
+            Component {
+                id: placesPageComponent
+                EmptyPage {
+                    id: placesPage
+                    objectName: "placesPage"
+                    T.StackView.onActivated: {
+                        kickoff.sideBar = categorySidebar
+                        kickoff.contentArea = contentListView
+                    }
+                    Accessible.role: Accessible.Pane
+                    Accessible.name: i18n("Places")
+
+                    contentItem: RowLayout {
+                        spacing: 0
+                        Components.AccessibleListView {
+                            id: categorySidebar
+                            Layout.preferredWidth: root.preferredSideBarWidth + kickoff.backgroundMetrics.leftPadding
+                            Layout.fillHeight: true
+                            model: ListModel {
+                                id: placesCategoryModel
+                                ListElement { display: "Computer"; decoration: "computer" }
+                                ListElement { display: "History"; decoration: "view-history" }
+                                ListElement { display: "Frequently Used"; decoration: "clock" }
+                                Component.onCompleted: {
+                                    placesCategoryModel.setProperty(0, "display", i18nc("category in Places sidebar", "Computer"))
+                                    placesCategoryModel.setProperty(1, "display", i18nc("category in Places sidebar", "History"))
+                                    placesCategoryModel.setProperty(2, "display", i18nc("category in Places sidebar", "Frequently Used"))
+                                    if (Singletons.MenuSingleton.powerManagement.data["PowerDevil"]
+                                        && Singletons.MenuSingleton.powerManagement.data["PowerDevil"]["Is Lid Present"]) {
+                                        placesCategoryModel.setProperty(0, "decoration", "computer-laptop")
+                                    }
+                                }
+                            }
+                            delegate: Delegates.AppDelegate {
+                                width: categorySidebar.view.availableWidth
+                                text: model.display ?? ""
+                                decoration: model.decoration ?? ""
+                                isCategoryListItem: true
+                                displayMode: "list"
+                                hoverEnabled: true
+                            }
+                            view.section.property: ""
+                            Keys.onRightPressed: event => contentListView.forceActiveFocus(Qt.TabFocusReason)
+                        }
+                        Components.AccessibleListView {
+                            id: contentListView
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            mainContentView: true
+                            model: {
+                                switch (categorySidebar.currentIndex) {
+                                    case 0: return kickoff.computerModel
+                                    case 1: return kickoff.recentUsageModel
+                                    case 2: return kickoff.frequentUsageModel
+                                    default: return null
+                                }
+                            }
+                            Keys.onLeftPressed: event => categorySidebar.forceActiveFocus(Qt.BacktabFocusReason)
+                        }
+                    }
+                }
+            }
+
+            Component {
+                id: infoPageComponent
+                InfoPage {
+                    id: infoPage
+                    objectName: "infoPage"
+                }
+            }
+
+            Component {
+                id: searchViewComponent
+                SearchResultsPage {
+                    id: searchPage
+                    objectName: "searchView"
+                }
+            }
+
+            Keys.priority: Keys.AfterItem
+            Keys.forwardTo: kickoff.searchField
+
+            // ── Search text triggers page switch ──
+            Connections {
+                target: root.header
+                function onSearchTextChanged() {
+                    if (root.header.searchText.length === 0 && contentItemStackView.currentItem && contentItemStackView.currentItem.objectName === "searchView") {
+                        root.blockingHoverFocus = false
+                        contentItemStackView.reverseTransitions = true
+                        switchToTab(navBar.currentIndex)
+                    } else if (root.header.searchText.length > 0) {
+                        if (!contentItemStackView.currentItem || contentItemStackView.currentItem.objectName !== "searchView") {
+                            // Defer if a transition is still running to avoid
+                            // replacing an item mid-animation (use-after-free).
+                            if (contentItemStackView.busy) {
+                                root.pendingSearch = true
+                                return
+                            }
+                            contentItemStackView.reverseTransitions = false
+                            contentItemStackView.replace(searchViewComponent)
+                        } else {
+                            root.blockingHoverFocus = true
+                        }
                     }
                 }
             }
         }
+
+        // ─── VERTICAL SEPARATOR ───
+        Kirigami.Separator {
+            Layout.fillHeight: true
+            Layout.preferredWidth: 1
+        }
+
+        // ─── RIGHT NAVIGATION SIDEBAR ───
+        Rectangle {
+            id: navSideBar
+            Layout.fillHeight: true
+            Layout.preferredWidth: Kirigami.Units.gridUnit * 3.5
+            color: Qt.rgba(
+                Kirigami.Theme.backgroundColor.r,
+                Kirigami.Theme.backgroundColor.g,
+                Kirigami.Theme.backgroundColor.b,
+                0.3
+            )
+
+            Accessible.role: Accessible.ToolBar
+            Accessible.name: i18n("Main navigation")
+
+            ColumnLayout {
+                id: navBar
+                anchors.fill: parent
+                anchors.topMargin: Kirigami.Units.smallSpacing
+                anchors.bottomMargin: Kirigami.Units.smallSpacing
+                spacing: Kirigami.Units.smallSpacing
+
+                property int currentIndex: 0
+
+                Accessible.role: Accessible.PageTabList
+                Accessible.name: i18n("Main navigation tabs")
+
+                // ── Home ──
+                PC3.AbstractButton {
+                    id: homeTab
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: Kirigami.Units.gridUnit * 3
+                    checkable: true
+                    checked: navBar.currentIndex === 0
+                    hoverEnabled: true
+                    onClicked: navBar.currentIndex = 0
+
+                    Accessible.name: i18n("Home")
+                    Accessible.role: Accessible.PageTab
+                    Accessible.description: i18n("Show favorites and recent apps")
+
+                    contentItem: ColumnLayout {
+                        spacing: 2
+                        Kirigami.Icon {
+                            source: "go-home-symbolic"
+                            Layout.preferredWidth: Kirigami.Units.iconSizes.smallMedium
+                            Layout.preferredHeight: Kirigami.Units.iconSizes.smallMedium
+                            Layout.alignment: Qt.AlignHCenter
+                            selected: homeTab.checked
+                        }
+                        PC3.Label {
+                            text: i18n("Home")
+                            font.pointSize: Kirigami.Theme.smallFont.pointSize
+                            horizontalAlignment: Text.AlignHCenter
+                            Layout.fillWidth: true
+                            color: homeTab.checked ? Kirigami.Theme.highlightColor : Kirigami.Theme.textColor
+                        }
+                    }
+                    background: Rectangle {
+                        anchors.fill: parent
+                        anchors.leftMargin: 4
+                        anchors.rightMargin: 4
+                        radius: Kirigami.Units.smallSpacing
+                        color: homeTab.checked
+                            ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.15)
+                            : homeTab.hovered
+                                ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.07)
+                                : "transparent"
+                    }
+                }
+
+                // ── Apps ──
+                PC3.AbstractButton {
+                    id: appsTab
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: Kirigami.Units.gridUnit * 3
+                    checkable: true
+                    checked: navBar.currentIndex === 1
+                    hoverEnabled: true
+                    onClicked: navBar.currentIndex = 1
+
+                    Accessible.name: i18n("Apps")
+                    Accessible.role: Accessible.PageTab
+                    Accessible.description: i18n("Browse all installed applications")
+
+                    contentItem: ColumnLayout {
+                        spacing: 2
+                        Kirigami.Icon {
+                            source: "view-app-grid-symbolic"
+                            Layout.preferredWidth: Kirigami.Units.iconSizes.smallMedium
+                            Layout.preferredHeight: Kirigami.Units.iconSizes.smallMedium
+                            Layout.alignment: Qt.AlignHCenter
+                            selected: appsTab.checked
+                        }
+                        PC3.Label {
+                            text: i18n("Apps")
+                            font.pointSize: Kirigami.Theme.smallFont.pointSize
+                            horizontalAlignment: Text.AlignHCenter
+                            Layout.fillWidth: true
+                            color: appsTab.checked ? Kirigami.Theme.highlightColor : Kirigami.Theme.textColor
+                        }
+                    }
+                    background: Rectangle {
+                        anchors.fill: parent
+                        anchors.leftMargin: 4
+                        anchors.rightMargin: 4
+                        radius: Kirigami.Units.smallSpacing
+                        color: appsTab.checked
+                            ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.15)
+                            : appsTab.hovered
+                                ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.07)
+                                : "transparent"
+                    }
+                }
+
+                // ── Places ──
+                PC3.AbstractButton {
+                    id: placesTab
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: Kirigami.Units.gridUnit * 3
+                    checkable: true
+                    checked: navBar.currentIndex === 2
+                    hoverEnabled: true
+                    onClicked: navBar.currentIndex = 2
+
+                    Accessible.name: i18n("Places")
+                    Accessible.role: Accessible.PageTab
+                    Accessible.description: i18n("Computer, history, and frequently used")
+
+                    contentItem: ColumnLayout {
+                        spacing: 2
+                        Kirigami.Icon {
+                            source: "folder-symbolic"
+                            Layout.preferredWidth: Kirigami.Units.iconSizes.smallMedium
+                            Layout.preferredHeight: Kirigami.Units.iconSizes.smallMedium
+                            Layout.alignment: Qt.AlignHCenter
+                            selected: placesTab.checked
+                        }
+                        PC3.Label {
+                            text: i18n("Places")
+                            font.pointSize: Kirigami.Theme.smallFont.pointSize
+                            horizontalAlignment: Text.AlignHCenter
+                            Layout.fillWidth: true
+                            color: placesTab.checked ? Kirigami.Theme.highlightColor : Kirigami.Theme.textColor
+                        }
+                    }
+                    background: Rectangle {
+                        anchors.fill: parent
+                        anchors.leftMargin: 4
+                        anchors.rightMargin: 4
+                        radius: Kirigami.Units.smallSpacing
+                        color: placesTab.checked
+                            ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.15)
+                            : placesTab.hovered
+                                ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.07)
+                                : "transparent"
+                    }
+                }
+
+                // ── Info ──
+                PC3.AbstractButton {
+                    id: infoTab
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: Kirigami.Units.gridUnit * 3
+                    checkable: true
+                    checked: navBar.currentIndex === 3
+                    hoverEnabled: true
+                    onClicked: navBar.currentIndex = 3
+
+                    Accessible.name: i18n("Info")
+                    Accessible.role: Accessible.PageTab
+                    Accessible.description: i18n("System information and widgets")
+
+                    contentItem: ColumnLayout {
+                        spacing: 2
+                        Kirigami.Icon {
+                            source: "help-about-symbolic"
+                            Layout.preferredWidth: Kirigami.Units.iconSizes.smallMedium
+                            Layout.preferredHeight: Kirigami.Units.iconSizes.smallMedium
+                            Layout.alignment: Qt.AlignHCenter
+                            selected: infoTab.checked
+                        }
+                        PC3.Label {
+                            text: i18n("Info")
+                            font.pointSize: Kirigami.Theme.smallFont.pointSize
+                            horizontalAlignment: Text.AlignHCenter
+                            Layout.fillWidth: true
+                            color: infoTab.checked ? Kirigami.Theme.highlightColor : Kirigami.Theme.textColor
+                        }
+                    }
+                    background: Rectangle {
+                        anchors.fill: parent
+                        anchors.leftMargin: 4
+                        anchors.rightMargin: 4
+                        radius: Kirigami.Units.smallSpacing
+                        color: infoTab.checked
+                            ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.15)
+                            : infoTab.hovered
+                                ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.07)
+                                : "transparent"
+                    }
+                }
+
+                Item { Layout.fillHeight: true } // spacer pushes tabs to top
+
+                onCurrentIndexChanged: {
+                    if (root.header && root.header.searchText.length === 0) {
+                        switchToTab(currentIndex)
+                    }
+                }
+
+                // Reset to Home when menu opens
+                Connections {
+                    target: kickoff
+                    function onExpandedChanged() {
+                        if (kickoff.expanded) {
+                            navBar.currentIndex = 0
+                        }
+                    }
+                }
+            }
+
+            // Bind footer/navBar to kickoff
+            Binding {
+                target: kickoff
+                property: "footer"
+                value: navBar
+                restoreMode: Binding.RestoreBinding
+            }
+        }
+    }
+
+    // ── Helper to switch content page ──
+    function switchToTab(tabIndex) {
+        var targetObjectName
+        var targetComponent
+
+        switch (tabIndex) {
+            case 0:
+                targetObjectName = "homePage"
+                targetComponent = homePageComponent
+                break
+            case 1:
+                targetObjectName = "allAppsPage"
+                targetComponent = allAppsPageComponent
+                break
+            case 2:
+                targetObjectName = "placesPage"
+                targetComponent = placesPageComponent
+                break
+            case 3:
+                targetObjectName = "infoPage"
+                targetComponent = infoPageComponent
+                break
+            default:
+                return
+        }
+
+        if (!contentItemStackView.currentItem)
+            return
+        if (contentItemStackView.currentItem.objectName === targetObjectName)
+            return
+        // Never replace() while a transition is running — defer it instead.
+        if (contentItemStackView.busy) {
+            root.pendingTabIndex = tabIndex
+            return
+        }
+        contentItemStackView.reverseTransitions = false
+        contentItemStackView.replace(targetComponent)
     }
 
     Component.onCompleted: {

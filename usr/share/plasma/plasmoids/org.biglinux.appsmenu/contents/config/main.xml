@@ -69,5 +69,93 @@
             <label>Whether to show the "All Applications" category in the sidebar</label>
             <default>false</default>
         </entry>
+
+        <!-- Visibility Controls (new architecture) -->
+        <entry name="showSmartSection" type="Bool">
+            <label>Show AI-suggested apps section on the home page</label>
+            <default>true</default>
+        </entry>
+        <entry name="showRecentSection" type="Bool">
+            <label>Show recently used apps section on the home page</label>
+            <default>true</default>
+        </entry>
+        <entry name="showFrequentSection" type="Bool">
+            <label>Show frequently used apps section on the home page</label>
+            <default>false</default>
+        </entry>
+        <entry name="showPlacesTab" type="Bool">
+            <label>Show Places tab in the footer</label>
+            <default>true</default>
+        </entry>
+
+        <!-- Onboarding -->
+        <entry name="onboardingCompleted" type="Bool">
+            <label>Whether the first-run experience has been completed</label>
+            <default>false</default>
+        </entry>
+
+        <!-- Accessibility -->
+        <entry name="highContrastMode" type="Bool">
+            <label>Force high contrast for all text elements</label>
+            <default>false</default>
+        </entry>
+        <entry name="largeTextMode" type="Bool">
+            <label>Increase text sizes for readability</label>
+            <default>false</default>
+        </entry>
+
+        <!-- Search -->
+        <entry name="searchShowCategories" type="Bool">
+            <label>Group search results by category</label>
+            <default>true</default>
+        </entry>
+
+        <!-- Home Page: Recent sections -->
+        <entry name="showRecentFiles" type="Bool">
+            <label>Show recently opened files on the home page</label>
+            <default>true</default>
+        </entry>
+        <entry name="showRecentFolders" type="Bool">
+            <label>Show recently used folders on the home page</label>
+            <default>true</default>
+        </entry>
+        <entry name="recentAppsMax" type="Int">
+            <label>Maximum number of recent apps to show</label>
+            <default>5</default>
+        </entry>
+        <entry name="recentFilesMax" type="Int">
+            <label>Maximum number of recent files to show</label>
+            <default>5</default>
+        </entry>
+        <entry name="recentFoldersMax" type="Int">
+            <label>Maximum number of recent folders to show</label>
+            <default>5</default>
+        </entry>
+
+        <!-- Info Page: Widget visibility -->
+        <entry name="infoShowSystemInfo" type="Bool">
+            <label>Show system information widget (hostname, kernel, shell, etc.)</label>
+            <default>true</default>
+        </entry>
+        <entry name="infoShowHardwareMonitor" type="Bool">
+            <label>Show hardware monitor widget (CPU, RAM, SWAP, Disk)</label>
+            <default>true</default>
+        </entry>
+        <entry name="infoShowCalendar" type="Bool">
+            <label>Show calendar widget</label>
+            <default>true</default>
+        </entry>
+        <entry name="infoShowWeather" type="Bool">
+            <label>Show weather widget</label>
+            <default>true</default>
+        </entry>
+        <entry name="infoShowQuickLinks" type="Bool">
+            <label>Show quick links widget</label>
+            <default>true</default>
+        </entry>
+        <entry name="infoShowNews" type="Bool">
+            <label>Show news RSS feed widget</label>
+            <default>true</default>
+        </entry>
     </group>
 </kcfg>

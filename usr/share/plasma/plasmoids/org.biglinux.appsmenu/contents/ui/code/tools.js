@@ -167,3 +167,57 @@ function handleFavoriteAction(actionId, actionArgument) {
         favoriteModel.setFavoriteOn(favoriteId, actionArgument.favoriteActivity);
     }
 }
+
+/**
+ * Compute smart suggestion scores based on frequent usage + time of day.
+ *
+ * @param {Object} frequentModel - Kicker.RecentUsageModel with ordering=1
+ * @param {Object} favoritesModel - The favorites model (to filter duplicates)
+ * @param {number} maxItems - Maximum number of suggestions to return
+ * @returns {Array<{index: number, score: number}>} Sorted by score descending
+ */
+function computeSmartScores(frequentModel, favoritesModel, maxItems) {
+    if (!frequentModel || frequentModel.count === 0) {
+        return [];
+    }
+
+    // Time weight: different multipliers by time of day
+    const hour = new Date().getHours();
+    let timeWeight = 1.0;
+    if (hour >= 6 && hour < 12) {
+        timeWeight = 1.2; // Morning boost (work apps)
+    } else if (hour >= 12 && hour < 18) {
+        timeWeight = 1.0; // Afternoon neutral
+    } else if (hour >= 18 && hour < 24) {
+        timeWeight = 0.8; // Evening (entertainment boost relative to work)
+    } else {
+        timeWeight = 0.6; // Late night
+    }
+
+    const results = [];
+
+    for (let i = 0; i < frequentModel.count && results.length < maxItems * 2; i++) {
+        const idx = frequentModel.index(i, 0);
+        const display = frequentModel.data(idx, Qt.DisplayRole);
+
+        if (!display || display.length === 0) continue;
+
+        // Skip items already in favorites (avoid duplicates)
+        const favoriteId = frequentModel.data(idx, frequentModel.KItemModels
+            ? frequentModel.KItemModels.KRoleNames.role("favoriteId")
+            : 0);
+
+        // Calculate position-based frequency score (higher position = higher frequency)
+        const positionScore = (frequentModel.count - i) / frequentModel.count;
+        const score = positionScore * timeWeight;
+
+        results.push({ index: i, score: score });
+    }
+
+    // Sort by score descending
+    results.sort(function(a, b) { return b.score - a.score; });
+
+    // Return only maxItems
+    return results.slice(0, maxItems);
+}
+
