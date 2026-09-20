@@ -1,6 +1,71 @@
 # 08 — Info / Arquitetura de Gadgets
 
-## Estado atual do Info
+> **Status (Rodada 4): IMPLEMENTADO.** O `InfoPage` monolítico foi substituído
+> pelo framework abaixo. A seção "Estado atual do Info" a seguir descreve o
+> estado *anterior* e é mantida como histórico.
+
+## Arquitetura implementada (`contents/ui/gadgets/`)
+
+| Arquivo | Papel |
+|---|---|
+| `GadgetRegistry.qml` (singleton) | Catálogo: id, nome, ícone, categoria, tamanhos suportados, tamanho padrão, `online`, `multiple`; layout padrão. |
+| `GadgetGrid.qml` | Motor de grade: colunas 2/3/4, empacotamento first-fit preservando a ordem, drag & drop com reordenação ao vivo, `ListModel` das instâncias, serialização. |
+| `GadgetHost.qml` | O cartão: moldura (`Kirigami.ShadowedRectangle`, tinta de acento, hover lift), barra de título (alça de arraste), badges de edição (remover / tamanho / configurar), wiggle no modo edição, `Loader` assíncrono com **isolamento de falha** (estado de erro + "Try again" só no cartão), e a **API do host** (`cfg`, `setCfg`, `saveCfg`, `cacheGet/Set`, `sharedCacheGet/Set`, `active`, `compact/wide/tall`, `setError`, `openSettings`). |
+| `GadgetGallery.qml` | "Adicionar gadget": filtro por categoria, cartões com Add/Added, "Restaurar layout padrão" com confirmação. |
+| `GadgetSettingsDialog.qml` | Hospeda o `settingsComponent` de cada gadget. |
+| `GadgetTitleBar.qml`, `RingGauge.qml`, `Sparkline.qml`, `RoundedImage.qml` | Peças reutilizáveis (título, gauge em anel via `QtQuick.Shapes`, gráfico de histórico via Canvas, imagem arredondada via `MultiEffect`). |
+| `lib/GadgetNet.js` | Rede compartilhada: GET com timeout, JSON/XML, erros uniformes, helpers de cache com timestamp. |
+| `lib/WeatherOpenMeteo.js` · `lib/SportsTheSportsDB.js` · `lib/RssParser.js` | Providers desacoplados (a UI só conhece o formato normalizado). |
+| `items/*Gadget.qml` | 22 gadgets (lista abaixo). |
+
+**Persistência:** `Plasmoid.configuration.gadgetLayout` (JSON `{v, items:[{uid,id,size,cfg}]}`),
+`gadgetColumns`, `gadgetCache` (JSON com timestamps) — gravação com debounce
+(700 ms / 1,5 s). Sobrevive a fechar o menu, reiniciar o plasmashell e logout.
+
+**Lifecycle/pausa:** `host.active` = página Info ativa ∧ menu expandido ∧ cartão
+no viewport ∧ não arrastando. Todos os timers/rede usam `running: host.active`.
+Menu fechado → nada roda.
+
+**Drag & drop:** segurar (0,45 s) em qualquer lugar entra no modo edição;
+arrastar pela barra de título (normal) ou pelo cartão inteiro (edição). O grid
+move o item para a célula sob o ponteiro e re-empacota os demais com animação
+(preview ao vivo); solta → persiste. Auto-scroll perto das bordas.
+
+**Tamanhos:** `1x1`, `2x1`, `1x2`, `2x2` (por gadget); célula = largura da
+coluna, altura 0,94× — escala com DPI/fonte via `Kirigami.Units`.
+
+### Gadgets (22)
+Clock (analógico/digital), Calendar, Countdown, Notes, Weather (Open-Meteo,
+sem chave; localização por IP aproximada ou cidade), CPU Meter (todos os
+núcleos, temp, freq — KSystemStats), Memory, Battery (powermanagement; lida
+com desktop sem bateria), Drive Info (volumes via árvore de sensores), Drive
+Monitor, Network, System Info, Media Player (MPRIS), Clipboard (Klipper, com
+mascaramento), Quick Links (ícones grandes, editor com `IconDialog`), News Feed
+(RSS/Atom com imagens, múltiplos feeds editáveis), Currency (Frankfurter/BCE),
+Live Scores (TheSportsDB: ao vivo/próximos/resultados, ligas configuráveis),
+Quote of the Day (local + opcional ZenQuotes), Tips, Gallery (pasta local,
+crossfade + zoom), 2048.
+
+### Decisões de fornecedor
+- **ESPN** (`site.api.espn.com`) responde **403** desta rede para qualquer
+  User-Agent → substituído por **TheSportsDB** v1 (chave pública `3`,
+  documentada). Ids de liga verificados por chamada real.
+- Todos os providers sem chave de API; nada de tokens no repositório.
+- Dados sensíveis (clipboard, notas) nunca saem da máquina.
+
+### Armadilhas encontradas (e corrigidas) que valem registro
+- `property var data` num `Item` **sombreia a default property `data`** →
+  os filhos declarados viram valor da variável e o gadget fica vazio (Weather,
+  Currency, Sports). Renomeadas para `wx`/`fx`/`sb`.
+- Delegate de `Repeater` precisa ser `Item` (sensores embrulhados).
+- `relayout()` em `onWidthChanged` lia `cellWidth` ainda não reavaliado →
+  calcular a partir de `width` e também reagir a `onCellWidthChanged`.
+- Nós intermediários da `SensorTreeModel` não têm `SensorId` e o nível folha é
+  lazy (`fetchMore`) → descobrir volumes/núcleos pelas folhas.
+- `ksystemstats` não expõe o modelo da CPU (`cpu/cpu0/name` = "Núcleo 1") →
+  leitura única de `/proc/cpuinfo`.
+
+## Estado anterior do Info (histórico)
 
 `InfoPage.qml` é um dashboard **monolítico**: um `Flickable` com blocos fixos
 (Hardware CPU/RAM/SWAP/DISK, Notícias Phoronix, Data & Hora, Clima, Detalhes do

@@ -48,7 +48,28 @@ das rodadas anteriores eram cegas; com logging reabilitado no serviço, 7 classe
 de warning reais (binding loops, `undefined`→bool, `QIcon`→string) foram
 encontradas e corrigidas. Estado final: **0 warnings QML** em todas as páginas.
 
-## Estado por área (atualizado R3)
+## Rodada 4 — Info modular + UX
+- **Framework de gadgets entregue** (doc 08): grid 2/3/4 colunas com drag &
+  drop e reorganização automática, tamanhos 1x1/2x1/1x2/2x2, galeria
+  (adicionar/remover), configurações por gadget, persistência em
+  `Plasmoid.configuration`, isolamento de falha por cartão, pausa quando
+  invisível/menu fechado, cache e providers desacoplados sem chaves.
+- **22 gadgets**: relógio (analógico/digital), calendário, contagem regressiva,
+  notas, clima, CPU (todos os núcleos), memória, bateria, discos, monitor de
+  disco, rede, informações do sistema, player (MPRIS), clipboard, links
+  rápidos (editáveis, ícones grandes), feeds RSS com imagens (editáveis),
+  câmbio, placares ao vivo (futebol e outros esportes), frase do dia, dicas,
+  galeria, 2048.
+- UX: lembra a última aba/categoria; pastas recentes na Home; sidebar de Apps
+  no estilo de Places; Leave + botões Encerrar/Reiniciar/Desligar; avatar
+  grande que abre a pasta pessoal.
+
+## Estado por área (atualizado R4)
+| Área | Estado |
+|---|---|
+| Info | **Modular** — framework + 22 gadgets, verificado por screenshots e 0 warnings. Sem shell exceto leitura única de `/proc/cpuinfo` e comandos fixos/configurados pelo usuário nos Quick Links. |
+
+## Estado por área (R3)
 | Área | Estado |
 |---|---|
 | Home | OK (favoritos, recentes apps/arquivos/pastas; ícones QIcon corrigidos). |

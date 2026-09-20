@@ -134,3 +134,36 @@ ligado; ambiente restaurado para `*=false` ao final.
 ### Commits
 - `94ccdc1` fix: render apps again — delegate shadowed injected model; make
   config page save (push em `origin/feature/rafael-personal-menu`).
+
+## 2026-09-20 — Rodada 4 (UX + framework de gadgets do Info)
+
+### Ajustes de UX pedidos
+- Lembrar última aba e categoria (`rememberLastPage`, `lastTab`,
+  `lastCategoryRow`) — verificado: reabre em Apps/Wine.
+- Home "Recent folders" vazio: filtro descartava tudo (decoration é `QIcon`,
+  URLs sem barra final) → só limita a contagem.
+- Sidebar de Apps igual à de Places (`AppDelegate` em modo categoria, sem
+  separador, contagem como texto secundário).
+- Power: menu "Leave" + ícones Encerrar sessão/Reiniciar/Desligar (default
+  migrado uma vez; legendas off).
+- Avatar 3× maior com lift no hover; clique abre a pasta pessoal.
+
+### Framework de gadgets (ver doc 08) — ~5 k linhas QML/JS novas
+- `gadgets/`: Registry, Grid, Host, Gallery, SettingsDialog, TitleBar,
+  RingGauge, Sparkline, RoundedImage, `lib/` (rede + providers), 22 gadgets.
+- `InfoPage.qml` reescrito: toolbar (colunas 2/3/4, Editar, Adicionar),
+  persistência com debounce, galeria, diálogo de configurações, auto-scroll
+  durante o arraste, Escape sai do modo edição.
+- `main.xml`: `gadgetColumns`, `gadgetLayout`, `gadgetCache`.
+
+### Como foi verificado
+- **Harness offscreen** (`scratchpad/harness.qml`): renderiza um gadget com um
+  host simulado e salva PNG (`qml6 -platform offscreen`, backend software) —
+  contact sheets de todos os gadgets. Foi assim que o bug do `property var
+  data` (cartões vazios) apareceu.
+- Providers testados de verdade (`qml6`): Open-Meteo, ipapi/ip-api, Frankfurter,
+  RSS Phoronix, TheSportsDB (ESPN = 403 → descartado).
+- Sessão ao vivo com warnings habilitados: Info com layout padrão, modo edição
+  (badges, wiggle) e galeria capturados via `spectacle -a`; **0 warnings QML**
+  no estado final; plasmashell estável.
+- Sensores: ids confirmados por `qdbus6 --literal … allSensors` (339 sensores).
