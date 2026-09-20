@@ -130,6 +130,7 @@ EmptyPage {
                 // ══════════════════════════════════
                 HomeSection {
                     id: recentAppsSection
+                    sectionKey: "recentApps"
                     sectionTitle: i18n("Recent Apps")
                     sectionIcon: "history"
                     sectionCount: root.recentModel ? root.recentModel.count : 0
@@ -161,6 +162,7 @@ EmptyPage {
                 // ══════════════════════════════════
                 HomeSection {
                     id: recentFilesSection
+                    sectionKey: "recentFiles"
                     sectionTitle: i18n("Recent Files")
                     sectionIcon: "document-open-recent"
                     sectionCount: root.recentDocsModel ? root.recentDocsModel.count : 0
@@ -192,6 +194,7 @@ EmptyPage {
                 // ══════════════════════════════════
                 HomeSection {
                     id: recentFoldersSection
+                    sectionKey: "recentFolders"
                     sectionTitle: i18n("Recent Folders")
                     sectionIcon: "folder-open-recent"
                     sectionCount: root.recentFoldersModel ? root.recentFoldersModel.count : 0
@@ -225,6 +228,7 @@ EmptyPage {
                 // ══════════════════════════════════
                 HomeSection {
                     id: frequentSection
+                    sectionKey: "frequent"
                     sectionTitle: i18n("Frequently Used")
                     sectionIcon: "clock"
                     sectionCount: root.frequentModel ? root.frequentModel.count : 0
@@ -277,31 +281,40 @@ EmptyPage {
     // ══════════════════════════════════════════════════════
 
     // ── Section card with header, count badge, collapse button ──
+    // Collapsed sections are remembered in Plasmoid.configuration.homeCollapsedSections
+    function isSectionCollapsed(key) {
+        return String(Plasmoid.configuration.homeCollapsedSections || "").split(",").indexOf(key) >= 0
+    }
+    function setSectionCollapsed(key, collapsed) {
+        let list = String(Plasmoid.configuration.homeCollapsedSections || "").split(",").filter(k => k.length && k !== key)
+        if (collapsed) list.push(key)
+        Plasmoid.configuration.homeCollapsedSections = list
+    }
+
     component HomeSection : Item {
         id: sectionRoot
         property string sectionTitle: ""
         property string sectionIcon: ""
         property int sectionCount: 0
         property bool collapsible: false
-        property bool expanded: true
-        property bool hoverEnabled: false
-        readonly property bool hovered: hoverEnabled && mouseArea.containsMouse
+        // persistence key; when set, the collapsed state survives closing the menu
+        property string sectionKey: ""
+        property bool expanded: sectionKey.length ? !root.isSectionCollapsed(sectionKey) : true
+        function toggle() {
+            if (!collapsible) return
+            expanded = !expanded
+            if (sectionKey.length) root.setSectionCollapsed(sectionKey, !expanded)
+        }
 
         default property alias contentChildren: sectionContentCol.data
-
-        MouseArea {
-            id: mouseArea
-            anchors.fill: parent
-            hoverEnabled: sectionRoot.hoverEnabled
-            // `hovered` is bound to containsMouse — it notifies by itself; emitting
-            // hoveredChanged(bool) by hand was invalid (signal takes no args).
-            onClicked: mouse => mouse.accepted = false
-        }
 
         Layout.fillWidth: true
         Layout.leftMargin: Kirigami.Units.mediumSpacing
         Layout.rightMargin: Kirigami.Units.mediumSpacing
-        Layout.preferredHeight: sectionInnerCol.implicitHeight + Kirigami.Units.largeSpacing
+        // header only when collapsed; animated
+        Layout.preferredHeight: (expanded ? sectionInnerCol.implicitHeight : headerBox.implicitHeight) + Kirigami.Units.largeSpacing
+        Behavior on Layout.preferredHeight { NumberAnimation { duration: Kirigami.Units.longDuration; easing.type: Easing.OutCubic } }
+        clip: true
 
         // Card background
         Rectangle {
@@ -325,9 +338,20 @@ EmptyPage {
             }
             spacing: Kirigami.Units.smallSpacing
 
-            // Header
-            RowLayout {
+            // Header — the whole row toggles collapsible sections
+            Item {
+                id: headerBox
                 Layout.fillWidth: true
+                implicitHeight: headerRow.implicitHeight
+                MouseArea {
+                    anchors.fill: parent
+                    enabled: sectionRoot.collapsible
+                    cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                    onClicked: sectionRoot.toggle()
+                }
+            RowLayout {
+                id: headerRow
+                anchors { left: parent.left; right: parent.right; top: parent.top }
                 spacing: Kirigami.Units.smallSpacing
 
                 Kirigami.Icon {
@@ -365,23 +389,32 @@ EmptyPage {
                 // Collapse/expand
                 PC3.ToolButton {
                     visible: sectionRoot.collapsible
-                    icon.name: sectionRoot.expanded ? "arrow-up" : "arrow-down"
+                    icon.name: "arrow-down"
                     icon.width: Kirigami.Units.iconSizes.small
                     icon.height: Kirigami.Units.iconSizes.small
                     display: PC3.AbstractButton.IconOnly
+                    // arrow points down when collapsed, up when expanded
+                    rotation: sectionRoot.expanded ? 180 : 0
+                    Behavior on rotation { NumberAnimation { duration: Kirigami.Units.longDuration; easing.type: Easing.OutCubic } }
 
                     Accessible.name: sectionRoot.expanded ? i18n("Collapse %1", sectionRoot.sectionTitle) : i18n("Expand %1", sectionRoot.sectionTitle)
                     Accessible.role: Accessible.Button
+                    PC3.ToolTip.text: sectionRoot.expanded ? i18n("Collapse") : i18n("Expand")
+                    PC3.ToolTip.visible: hovered
 
-                    onClicked: sectionRoot.expanded = !sectionRoot.expanded
+                    onClicked: sectionRoot.toggle()
                 }
             }
+            }
 
-            // Content area
+            // Content area (hidden while collapsed)
             ColumnLayout {
                 id: sectionContentCol
                 Layout.fillWidth: true
                 spacing: 0
+                visible: sectionRoot.expanded
+                opacity: sectionRoot.expanded ? 1 : 0
+                Behavior on opacity { NumberAnimation { duration: Kirigami.Units.shortDuration } }
             }
         }
     }

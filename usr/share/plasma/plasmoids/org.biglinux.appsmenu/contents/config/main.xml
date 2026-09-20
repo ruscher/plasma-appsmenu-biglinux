@@ -155,12 +155,17 @@
             <label>Maximum number of recent files to show</label>
             <default>5</default>
         </entry>
+        <entry name="homeCollapsedSections" type="StringList">
+            <label>Home sections the user collapsed (recentApps, recentFiles, recentFolders, frequent)</label>
+            <default></default>
+        </entry>
         <entry name="recentFoldersMax" type="Int">
             <label>Maximum number of recent folders to show</label>
             <default>5</default>
         </entry>
 
-        <!-- Info Page: Widget visibility -->
+        <!-- Legacy Info visibility keys retained for configuration compatibility.
+             Gadget visibility is now managed from the Info page itself. -->
         <entry name="infoShowSystemInfo" type="Bool">
             <label>Show system information widget (hostname, kernel, shell, etc.)</label>
             <default>true</default>
