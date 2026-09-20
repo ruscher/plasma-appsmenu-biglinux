@@ -36,13 +36,8 @@ KCM.SimpleKCM {
     property alias cfg_recentFilesMax: recentFilesMax.value
     property alias cfg_recentFoldersMax: recentFoldersMax.value
 
-    // ── Info ──
-    property alias cfg_infoShowHardwareMonitor: infoShowHardwareMonitor.checked
-    property alias cfg_infoShowSystemInfo: infoShowSystemInfo.checked
-    property alias cfg_infoShowCalendar: infoShowCalendar.checked
-    property alias cfg_infoShowWeather: infoShowWeather.checked
-    property alias cfg_infoShowQuickLinks: infoShowQuickLinks.checked
-    property alias cfg_infoShowNews: infoShowNews.checked
+    QQC2.ButtonGroup { id: appsGroup }
+    QQC2.ButtonGroup { id: favsGroup }
 
     Kirigami.FormLayout {
         id: form
@@ -79,6 +74,7 @@ KCM.SimpleKCM {
         }
         QQC2.RadioButton {
             id: appsGrid
+            QQC2.ButtonGroup.group: appsGroup
             Kirigami.FormData.label: i18n("Show applications as:")
             text: i18n("Grid")
             checked: root.cfg_applicationsDisplay === 0
@@ -86,12 +82,14 @@ KCM.SimpleKCM {
         }
         QQC2.RadioButton {
             id: appsList
+            QQC2.ButtonGroup.group: appsGroup
             text: i18n("List")
             checked: root.cfg_applicationsDisplay === 1
             onToggled: if (checked) root.cfg_applicationsDisplay = 1
         }
         QQC2.RadioButton {
             id: favsGrid
+            QQC2.ButtonGroup.group: favsGroup
             Kirigami.FormData.label: i18n("Show favorites as:")
             text: i18n("Grid")
             checked: root.cfg_favoritesDisplay === 0
@@ -99,6 +97,7 @@ KCM.SimpleKCM {
         }
         QQC2.RadioButton {
             id: favsList
+            QQC2.ButtonGroup.group: favsGroup
             text: i18n("List")
             checked: root.cfg_favoritesDisplay === 1
             onToggled: if (checked) root.cfg_favoritesDisplay = 1
@@ -142,35 +141,5 @@ KCM.SimpleKCM {
             from: 1; to: 20
         }
 
-        // ─── INFO ───
-        Kirigami.Separator {
-            Kirigami.FormData.isSection: true
-            Kirigami.FormData.label: i18n("Info")
-        }
-        QQC2.CheckBox {
-            id: infoShowHardwareMonitor
-            Kirigami.FormData.label: i18n("Widgets:")
-            text: i18n("Hardware monitor (CPU, RAM, swap, disk)")
-        }
-        QQC2.CheckBox {
-            id: infoShowSystemInfo
-            text: i18n("System details (hostname, kernel, shell, uptime)")
-        }
-        QQC2.CheckBox {
-            id: infoShowCalendar
-            text: i18n("Date & time")
-        }
-        QQC2.CheckBox {
-            id: infoShowWeather
-            text: i18n("Weather (needs internet)")
-        }
-        QQC2.CheckBox {
-            id: infoShowQuickLinks
-            text: i18n("Quick links")
-        }
-        QQC2.CheckBox {
-            id: infoShowNews
-            text: i18n("Phoronix news feed (needs internet)")
-        }
     }
 }

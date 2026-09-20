@@ -103,8 +103,12 @@
                 "Name[zh_TW]": "Mikel Johnson"
             },
             {
-                "Email": "biglinux.com.br",
-                "Name": "Bruno Goncalves"
+                "Email": "bigbruno@gmail.com",
+                "Name": "Bruno Gonçalves"
+            },
+            {
+                "Email": "rruscher@gmail.com",
+                "Name": "Rafael Ruscher"
             }
         ],
         "Category": "Application Launchers",
@@ -162,12 +166,14 @@
         "EnabledByDefault": true,
         "Icon": "big-favicon-new",
         "Id": "org.biglinux.appsmenu",
-        "License": "GPL-2.0+",
+        "License": "GPL-2.0-or-later",
         "Name": "BigLinux Application Launcher",
         "Name[es]": "Lanzador de Aplicaciones de BigLinux",
         "Name[pt]": "Lançador de Aplicações BigLinux",
         "Name[pt_BR]": "Lançador de aplicativos BigLinux",
-        "Website": "https://github.com/biglinux/plasma-appsmenu-biglinux"
+        "Website": "https://github.com/ruscher/plasma-appsmenu-biglinux",
+        "BugReportUrl": "https://github.com/ruscher/plasma-appsmenu-biglinux/issues",
+        "CopyrightText": "Copyright © 2011–2024 KDE and BigLinux contributors"
     },
     "X-Plasma-API-Minimum-Version": "6.0",
     "X-Plasma-RequiredExtensions": [

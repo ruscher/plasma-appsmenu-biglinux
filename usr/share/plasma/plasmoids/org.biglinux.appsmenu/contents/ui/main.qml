@@ -123,7 +123,7 @@ PlasmoidItem {
     // "Cannot assign QObject* to TextField_QMLTYPE_8*"
     property Item searchField: null
 
-    // Set in FullRepresentation.qml, AllAppsPage.qml, PlacesPage.qml
+    // Set by the active page in FullRepresentation.qml or AllAppsPage.qml
     property Item sideBar: null // is null when searching or on HomePage
     property Item contentArea: null // is searchView when searching
 

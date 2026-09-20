@@ -2,7 +2,7 @@
     SPDX-FileCopyrightText: 2024 BigLinux Team
     SPDX-License-Identifier: GPL-2.0-or-later
 
-    OnboardingOverlay — First-run welcome overlay with usage tips.
+    OnboardingOverlay — first-run introduction to the launcher.
     Shows once on first menu open, then never again.
 */
 
@@ -22,7 +22,8 @@ Rectangle {
     z: 1000
 
     Accessible.role: Accessible.Dialog
-    Accessible.name: i18n("Welcome overlay, press Enter to dismiss")
+    Accessible.name: i18n("Welcome to the BigLinux Application Launcher")
+    focus: shouldShow
 
     // Fade in
     opacity: 0
@@ -57,15 +58,16 @@ Rectangle {
     Rectangle {
         id: card
         anchors.centerIn: parent
-        width: Math.min(parent.width * 0.85, 360)
+        width: Math.min(parent.width - Kirigami.Units.largeSpacing * 2, Kirigami.Units.gridUnit * 30)
         height: cardLayout.implicitHeight + 2 * Kirigami.Units.gridUnit
         radius: Kirigami.Units.cornerRadius
         color: Kirigami.Theme.backgroundColor
         border.color: Kirigami.Theme.highlightColor
         border.width: 1
+        focus: root.shouldShow
 
         Accessible.role: Accessible.Pane
-        Accessible.name: i18n("Welcome to BigLinux")
+        Accessible.name: i18n("Welcome to the BigLinux Application Launcher")
 
         ColumnLayout {
             id: cardLayout
@@ -77,8 +79,8 @@ Rectangle {
 
             // Title
             PC3.Label {
-                text: i18n("Welcome to BigLinux!")
-                font.pointSize: Kirigami.Theme.defaultFont.pointSize * 1.4
+                text: i18n("Welcome to BigLinux")
+                font.pointSize: Kirigami.Theme.defaultFont.pointSize * 1.35
                 font.weight: Font.DemiBold
                 horizontalAlignment: Text.AlignHCenter
                 Layout.fillWidth: true
@@ -86,6 +88,14 @@ Rectangle {
 
                 Accessible.role: Accessible.Heading
                 Accessible.name: text
+            }
+
+            PC3.Label {
+                text: i18n("A simple way to find apps, files, places, and useful information.")
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.Wrap
+                color: Kirigami.Theme.disabledTextColor
+                Layout.fillWidth: true
             }
 
             // Tip 1: Search
@@ -99,7 +109,7 @@ Rectangle {
                     Layout.preferredHeight: Kirigami.Units.iconSizes.medium
                 }
                 PC3.Label {
-                    text: i18n("Type to search anything")
+                    text: i18n("Search applications, settings, and files from the field above")
                     wrapMode: Text.Wrap
                     Layout.fillWidth: true
                 }
@@ -116,7 +126,7 @@ Rectangle {
                     Layout.preferredHeight: Kirigami.Units.iconSizes.medium
                 }
                 PC3.Label {
-                    text: i18n("Right-click to add favorites")
+                    text: i18n("Right-click an application to add or remove it from Favorites")
                     wrapMode: Text.Wrap
                     Layout.fillWidth: true
                 }
@@ -133,7 +143,23 @@ Rectangle {
                     Layout.preferredHeight: Kirigami.Units.iconSizes.medium
                 }
                 PC3.Label {
-                    text: i18n("Press the gear icon to customize")
+                    text: i18n("Use Home, Apps, Places, and Info to move around the menu")
+                    wrapMode: Text.Wrap
+                    Layout.fillWidth: true
+                }
+            }
+
+            RowLayout {
+                spacing: Kirigami.Units.largeSpacing
+                Layout.fillWidth: true
+
+                Kirigami.Icon {
+                    source: "dashboard-show"
+                    Layout.preferredWidth: Kirigami.Units.iconSizes.medium
+                    Layout.preferredHeight: Kirigami.Units.iconSizes.medium
+                }
+                PC3.Label {
+                    text: i18n("Open Info to add gadgets for time, weather, system data, and more")
                     wrapMode: Text.Wrap
                     Layout.fillWidth: true
                 }
@@ -141,14 +167,15 @@ Rectangle {
 
             // Dismiss button
             PC3.Button {
-                text: i18n("Got it!")
+                id: dismissButton
+                text: i18n("Start using the menu")
                 icon.name: "dialog-ok-apply"
                 Layout.alignment: Qt.AlignHCenter
                 Layout.topMargin: Kirigami.Units.smallSpacing
                 focus: true
 
                 Accessible.role: Accessible.Button
-                Accessible.name: i18n("Dismiss welcome overlay")
+                Accessible.name: i18n("Start using the menu")
 
                 onClicked: fadeOut.restart()
 
@@ -167,7 +194,7 @@ Rectangle {
     // Focus the dismiss button when shown
     onShouldShowChanged: {
         if (shouldShow) {
-            card.forceActiveFocus()
+            dismissButton.forceActiveFocus()
         }
     }
 }
