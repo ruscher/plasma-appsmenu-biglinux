@@ -216,10 +216,15 @@ Item {
         ColumnLayout {
             property var host
             spacing: Kirigami.Units.largeSpacing
+            // RadioButtons in one FormLayout are siblings → they must be grouped
+            // explicitly or "Fahrenheit" would uncheck the location choice.
+            QQC2.ButtonGroup { id: locGroup }
+            QQC2.ButtonGroup { id: unitGroup }
             Kirigami.FormLayout {
                 Layout.fillWidth: true
                 QQC2.RadioButton {
                     id: autoRadio
+                    QQC2.ButtonGroup.group: locGroup
                     Kirigami.FormData.label: i18n("Location:")
                     text: i18n("Detect from my internet connection (approximate)")
                     checked: host.cfg.auto !== undefined ? host.cfg.auto : true
@@ -227,6 +232,7 @@ Item {
                 }
                 QQC2.RadioButton {
                     id: manualRadio
+                    QQC2.ButtonGroup.group: locGroup
                     text: i18n("City:")
                     checked: host.cfg.auto === false
                     onToggled: if (checked) host.setCfg("auto", false)
@@ -252,12 +258,14 @@ Item {
                     font.pointSize: Kirigami.Theme.smallFont.pointSize
                 }
                 QQC2.RadioButton {
+                    QQC2.ButtonGroup.group: unitGroup
                     Kirigami.FormData.label: i18n("Units:")
                     text: i18n("Celsius")
                     checked: (host.cfg.unit || "c") === "c"
                     onToggled: if (checked) host.setCfg("unit", "c")
                 }
                 QQC2.RadioButton {
+                    QQC2.ButtonGroup.group: unitGroup
                     text: i18n("Fahrenheit")
                     checked: host.cfg.unit === "f"
                     onToggled: if (checked) host.setCfg("unit", "f")

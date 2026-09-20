@@ -125,7 +125,7 @@ PlasmaExtras.PlasmoidHeading {
             Layout.rightMargin: kickoff.backgroundMetrics.rightPadding
             spacing: Kirigami.Units.smallSpacing
 
-            // Avatar button — large, opens the user's home folder
+            // Avatar button — large, opens the user account settings
             KirigamiComponents.AvatarButton {
                 id: avatar
 
@@ -138,9 +138,9 @@ PlasmaExtras.PlasmoidHeading {
 
                 Accessible.name: kuser.fullName || kuser.loginName
                 Accessible.role: Accessible.Button
-                Accessible.description: i18n("Open home folder")
+                Accessible.description: i18n("Open user account settings")
 
-                PC3.ToolTip.text: i18n("Open home folder")
+                PC3.ToolTip.text: i18n("User account: avatar, password…")
                 PC3.ToolTip.visible: hovered
                 PC3.ToolTip.delay: Kirigami.Units.toolTipDelay
 
@@ -149,7 +149,7 @@ PlasmaExtras.PlasmoidHeading {
                 Behavior on scale { NumberAnimation { duration: Kirigami.Units.shortDuration; easing.type: Easing.OutCubic } }
 
                 onClicked: {
-                    Qt.openUrlExternally(Platform.StandardPaths.writableLocation(Platform.StandardPaths.HomeLocation))
+                    KCM.KCMLauncher.openSystemSettings("kcm_users")
                     if (kickoff.hideOnWindowDeactivate) {
                         kickoff.expanded = false
                     }

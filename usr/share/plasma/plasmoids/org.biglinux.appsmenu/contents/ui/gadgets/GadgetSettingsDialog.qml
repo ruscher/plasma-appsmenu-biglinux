@@ -16,12 +16,13 @@ QQC2.Popup {
     id: dialog
     property var host: null
 
+    property Item settingsItem: null
     function openFor(h) {
         host = h
         if (h && h.settingsComponent) {
-            loader.sourceComponent = null
-            loader.setSource("", {})
-            loader.sourceComponent = h.settingsComponent
+            if (settingsItem) { settingsItem.destroy(); settingsItem = null }
+            // createObject so `host` is set BEFORE any binding runs
+            settingsItem = h.settingsComponent.createObject(settingsHolder, { "host": h })
             open()
         }
     }
@@ -35,7 +36,7 @@ QQC2.Popup {
     height: Math.min(parent ? parent.height - Kirigami.Units.gridUnit * 2 : 400, contentItem.implicitHeight + topPadding + bottomPadding)
     padding: Kirigami.Units.largeSpacing
 
-    onClosed: { loader.sourceComponent = null; host = null }
+    onClosed: { if (settingsItem) { settingsItem.destroy(); settingsItem = null }; host = null }
 
     enter: Transition {
         NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Kirigami.Units.shortDuration }
@@ -81,18 +82,15 @@ QQC2.Popup {
         QQC2.ScrollView {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            Layout.preferredHeight: Math.min(loader.item ? loader.item.implicitHeight : 0, Kirigami.Units.gridUnit * 22)
+            Layout.preferredHeight: Math.min(settingsHolder.implicitHeight, Kirigami.Units.gridUnit * 22)
             clip: true
             contentWidth: availableWidth
 
-            Loader {
-                id: loader
+            Item {
+                id: settingsHolder
                 width: parent ? parent.width : 0
-                onLoaded: {
-                    if (item && dialog.host) {
-                        if (item.hasOwnProperty("host")) item.host = dialog.host
-                    }
-                }
+                implicitHeight: dialog.settingsItem ? dialog.settingsItem.implicitHeight : 0
+                onWidthChanged: if (dialog.settingsItem) dialog.settingsItem.width = width
             }
         }
 

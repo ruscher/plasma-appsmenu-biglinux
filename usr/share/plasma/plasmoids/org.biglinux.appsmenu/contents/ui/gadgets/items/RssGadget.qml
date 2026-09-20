@@ -21,8 +21,11 @@ Item {
 
     readonly property int refreshMs: 30 * 60 * 1000
     readonly property var defaultFeeds: [
+        { name: "Diolinux", url: "https://diolinux.com.br/feed" },
         { name: "Phoronix", url: "https://www.phoronix.com/rss.php" },
-        { name: "KDE News", url: "https://kde.org/index.xml" },
+        { name: "OMG! Ubuntu", url: "https://www.omgubuntu.co.uk/feed" },
+        { name: "SempreUpdate", url: "https://sempreupdate.com.br/feed/" },
+        { name: "DistroWatch", url: "https://distrowatch.com/news/dw.xml" },
     ]
     readonly property var feeds: host.cfg.feeds && host.cfg.feeds.length ? host.cfg.feeds : defaultFeeds
     readonly property int current: Math.max(0, Math.min(feeds.length - 1, host.cfg.current || 0))
@@ -58,15 +61,28 @@ Item {
         if (busy) return
         busy = true; host.loading = true; host.clearError()
         const url = feed.url
-        xhr = Net.fetchXml(url, (err, doc) => {
+        // Fetch as text and parse it ourselves: many servers send feeds with a
+        // non-XML Content-Type (responseXML would be null) and dead feeds return
+        // an HTML page — we tell those apart in the error message.
+        xhr = Net.fetchText(url, (err, text) => {
             busy = false; host.loading = false
             if (url !== rss.feed.url) return   // feed switched meanwhile
-            if (err || !doc) {
-                host.offline = true
-                if (!items.length) host.setError(i18n("Could not load \"%1\" (%2).", feed.name, Net.describeError(err || "xml")))
+            if (err) {
+                host.offline = err === "network" || err === "timeout"
+                if (!items.length) host.setError(err.indexOf("http") === 0
+                    ? i18n("\"%1\" answered %2. The feed address may be wrong or discontinued.", feed.name, err.toUpperCase())
+                    : i18n("Could not reach \"%1\" (%2).", feed.name, Net.describeError(err)))
                 return
             }
             host.offline = false
+            let doc = null
+            if (Rss.looksLikeXml(text) || !Rss.looksLikeHtml(text)) doc = Rss.parseText(text)
+            if (!doc) {
+                if (!items.length) host.setError(Rss.looksLikeHtml(text)
+                    ? i18n("\"%1\" returns a web page, not a feed. Open the site and copy its RSS/Atom link.", feed.name)
+                    : i18n("\"%1\" is not a valid RSS/Atom feed.", feed.name))
+                return
+            }
             const parsed = Rss.parse(doc, maxItems)
             if (!parsed.items.length && !items.length) {
                 host.setError(i18n("No entries found in this feed."))
@@ -94,7 +110,7 @@ Item {
             visible: rss.feeds.length > 1
             spacing: 2
             Repeater {
-                model: rss.feeds.slice(0, 4)
+                model: rss.feeds.slice(0, rss.host.wide ? 5 : 3)
                 delegate: PC3.ToolButton {
                     required property var modelData
                     required property int index

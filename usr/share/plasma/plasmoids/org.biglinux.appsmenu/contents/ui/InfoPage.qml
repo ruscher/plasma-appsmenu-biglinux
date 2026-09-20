@@ -118,6 +118,13 @@ EmptyPage {
                 font.weight: grid.editing ? Font.Normal : Font.DemiBold
                 opacity: grid.editing ? 0.7 : 1
                 elide: Text.ElideRight
+            }
+            PC3.Label {
+                visible: !grid.editing
+                text: i18n("press and hold a gadget to move it")
+                font.pointSize: Kirigami.Theme.smallFont.pointSize * 0.9
+                opacity: 0.5
+                elide: Text.ElideRight
                 Layout.fillWidth: true
             }
 

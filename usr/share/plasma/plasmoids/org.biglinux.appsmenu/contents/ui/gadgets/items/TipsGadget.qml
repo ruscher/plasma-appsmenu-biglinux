@@ -30,6 +30,21 @@ Item {
         { icon: "preferences-desktop-theme", t: i18n("Meta+Shift+D reveals the desktop; press again to bring your windows back.") },
         { icon: "accessories-calculator", t: i18n("Type a calculation like 15% of 320 straight into the search field for an instant answer.") },
         { icon: "system-help", t: i18n("Hold Meta for a second on the desktop to see a cheat sheet of every keyboard shortcut.") },
+        // Phrases from the BigLinux login screen (sddm-theme-biglinux)
+        { icon: "system-file-manager", t: i18n("In the 'Dolphin' file manager, press the '/' key and type what you are looking for to filter items in the current folder, or use 'Ctrl + F' to search within subfolders as well.") },
+        { icon: "kdeconnect", t: i18n("With KDEConnect, your computers, tablets, and smartphones can communicate, exchange files, serve as remote controls, and much more.") },
+        { icon: "network-server", t: i18n("In the file manager, you can access files on SSH, SFTP, Samba servers, and more. Access remote files with much greater ease.") },
+        { icon: "utilities-terminal", t: i18n("In the 'Dolphin' file manager and the 'Kate' text editor, press 'F4' to access the embedded terminal. The best of graphical mode and terminal in the same place.") },
+        { icon: "edit-paste", t: i18n("Use the 'WinKey + V' shortcut to access the history of copied contents. After using the shortcut, type what you want to filter the results.") },
+        { icon: "accessories-calculator", t: i18n("In the system menu, besides finding programs, it is also easy to do calculations and conversions, for example, '5 + 7' or '5m'.") },
+        { icon: "window-duplicate", t: i18n("To split the screen with more programs, move each window to one of the sides or corners of the screen.") },
+        { icon: "battery-good", t: i18n("Most laptops perform better when plugged into a power outlet.") },
+        { icon: "tux", t: i18n("Every day, humans depend more on computing. Take advantage of using Linux and free software; here you can truly learn how things work.") },
+        { icon: "spectacle", t: i18n("When using the 'Print Screen' key, notice the 'Edit' button, where you can make quick edits to the image. You can also copy the image and paste it directly into programs without the need to save and attach.") },
+        { icon: "okular", t: i18n("In the 'Okular' document viewer, you can make annotations and notes on your PDF files, and even add digital signatures.") },
+        { icon: "image-x-generic", t: i18n("By right-clicking on an image file, you can make various edits, including resizing and converting, directly from the file manager.") },
+        { icon: "application-pdf", t: i18n("To convert Office documents to other formats, including PDF, just right-click and choose the format, directly from the file manager.") },
+        { icon: "krunner", t: i18n("Use 'KRunner' by pressing 'Alt + Space' to perform quick searches, execute commands, and even solve mathematical calculations.") },
     ]
     property int index: Math.floor(Math.random() * list.length)
 

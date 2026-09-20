@@ -62,9 +62,13 @@ RowLayout {
             systemFavoritesContainsRow(sourceRow, sourceParent)
     }
 
-    // Menu: every action (so nothing is unreachable when buttons are hidden)
+    // Menu: the remaining actions (the favorites are already icon buttons);
+    // when the buttons are collapsed, everything goes into the menu.
     FilteredModel {
         id: menuModel
+        filterRowCallback: root.shouldCollapseButtons
+            ? null
+            : (sourceRow, sourceParent) => !systemFavoritesContainsRow(sourceRow, sourceParent)
     }
 
     // ── "Leave" menu button ──

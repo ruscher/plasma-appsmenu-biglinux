@@ -123,3 +123,51 @@ function parse(doc, maxItems) {
     }
     return result
 }
+
+// ── Minimal XML tokenizer → DOM-like tree compatible with parse() ──
+// Used when the server sends a feed with a non-XML Content-Type (responseXML
+// is then null). Handles tags, attributes, CDATA, comments, entities.
+function decodeEntities(s) {
+    return String(s).replace(/&#x([0-9a-f]+);/gi, function(m, h) { return String.fromCharCode(parseInt(h, 16)) })
+        .replace(/&#(\d+);/g, function(m, d) { return String.fromCharCode(parseInt(d, 10)) })
+        .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, "&")
+}
+function parseText(text) {
+    var src = String(text || "")
+    var root = { nodeName: "#document", attributes: [], childNodes: [], documentElement: null }
+    var stack = [root]
+    var i = 0, n = src.length
+    var attrRe = /([^\s=\/>]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/g
+    while (i < n) {
+        var lt = src.indexOf("<", i)
+        if (lt < 0) { var tail = src.substring(i); if (tail.trim()) stack[stack.length - 1].childNodes.push({ nodeName: "#text", nodeValue: decodeEntities(tail), childNodes: [], attributes: [] }); break }
+        if (lt > i) { var txt = src.substring(i, lt); if (txt.trim()) stack[stack.length - 1].childNodes.push({ nodeName: "#text", nodeValue: decodeEntities(txt), childNodes: [], attributes: [] }) }
+        if (src.startsWith("<!--", lt)) { var ce = src.indexOf("-->", lt); i = ce < 0 ? n : ce + 3; continue }
+        if (src.startsWith("<![CDATA[", lt)) { var cd = src.indexOf("]]>", lt); var val = src.substring(lt + 9, cd < 0 ? n : cd); stack[stack.length - 1].childNodes.push({ nodeName: "#cdata-section", nodeValue: val, childNodes: [], attributes: [] }); i = cd < 0 ? n : cd + 3; continue }
+        if (src.startsWith("<?", lt) || src.startsWith("<!", lt)) { var pe = src.indexOf(">", lt); i = pe < 0 ? n : pe + 1; continue }
+        var gt = src.indexOf(">", lt)
+        if (gt < 0) break
+        var inner = src.substring(lt + 1, gt)
+        i = gt + 1
+        if (inner.charAt(0) === "/") { var closeName = inner.substring(1).trim(); for (var k = stack.length - 1; k > 0; k--) { if (stack[k].nodeName === closeName) { stack.length = k; break } } continue }
+        var selfClose = inner.endsWith("/")
+        if (selfClose) inner = inner.substring(0, inner.length - 1)
+        var sp = inner.search(/\s/)
+        var name = sp < 0 ? inner : inner.substring(0, sp)
+        var attrs = []
+        if (sp >= 0) { var m; attrRe.lastIndex = 0; var rest = inner.substring(sp); while ((m = attrRe.exec(rest)) !== null) attrs.push({ name: m[1], value: decodeEntities(m[2] !== undefined ? m[2] : (m[3] !== undefined ? m[3] : m[4] || "")) }) }
+        var node = { nodeName: name, attributes: attrs, childNodes: [], nodeValue: null }
+        stack[stack.length - 1].childNodes.push(node)
+        if (!root.documentElement) root.documentElement = node
+        if (!selfClose) stack.push(node)
+    }
+    return root.documentElement ? root : null
+}
+function looksLikeXml(text) {
+    var head = String(text || "").substring(0, 1200)
+    return /<\?xml|<rss[\s>]|<feed[\s>]|<rdf:RDF|<RDF/i.test(head)
+}
+function looksLikeHtml(text) {
+    var head = String(text || "").substring(0, 1200)
+    return /<!doctype html|<html[\s>]|<head[\s>]/i.test(head)
+}

@@ -136,9 +136,6 @@ EmptyPage {
                     collapsible: true
                     visible: Plasmoid.configuration.showRecentSection && root.recentModel !== null && root.recentModel.count > 0
 
-                    hoverEnabled: true
-                    onHoveredChanged: if (hovered) expanded = true
-
                     ColumnLayout {
                         Layout.fillWidth: true
                         spacing: 0
@@ -201,9 +198,6 @@ EmptyPage {
                     collapsible: true
                     visible: Plasmoid.configuration.showRecentFolders && root.recentFoldersModel !== null && root.recentFoldersModel.count > 0
 
-                    hoverEnabled: true
-                    onHoveredChanged: if (hovered) expanded = true
-
                     ColumnLayout {
                         Layout.fillWidth: true
                         spacing: 0
@@ -236,9 +230,6 @@ EmptyPage {
                     sectionCount: root.frequentModel ? root.frequentModel.count : 0
                     collapsible: true
                     visible: Plasmoid.configuration.showFrequentSection && root.frequentModel !== null && root.frequentModel.count > 0
-
-                    hoverEnabled: true
-                    onHoveredChanged: if (hovered) expanded = true
 
                     ColumnLayout {
                         Layout.fillWidth: true
