@@ -24,9 +24,10 @@ completa de auditoria e planejamento.
 | 1 | hover → `replace()` reentrante em transição (use-after-free) | `FullRepresentation.qml` | ✅ corrigido |
 | 2 | `model.disabled` sem guarda no delegate vivo | `delegates/AppDelegate.qml` | ✅ corrigido |
 | 3 | `kickoff.action("configure")` (Plasma 5) → TypeError | `InfoPage.qml` | ✅ corrigido |
-| 4 | deref de `model.*` sem guarda (delegate legado) | `AbstractKickoffItemDelegate.qml` | ⏳ P1 |
-| 5 | deref pós-`pop()` | `AllAppsPage.qml` | ⏳ P1 |
-| 6 | `root.parent` em transição | `SearchResultsPage.qml` | ⏳ P1 |
+| 4 | deref de `model.*` sem guarda (delegate legado) | `AbstractKickoffItemDelegate.qml` | ✅ corrigido (R2) |
+| 5 | deref pós-`pop()` | `AllAppsPage.qml` | ✅ corrigido (R2) |
+| 6 | `root.parent` em transição | `SearchResultsPage.qml` | ✅ corrigido (R2) |
+| 7 | 2ª instância hover→replace (sidebar de categorias) | `AllAppsPage.qml` | ✅ corrigido (R2) |
 
 ## Correções de memória/recursos
 - ✅ Removido `Qt.createQmlObject` de `DataSource` por clique (vazamento).

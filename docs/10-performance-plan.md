@@ -1,8 +1,25 @@
 # 10 — Plano de Performance
 
-## Como medir (baseline honesto)
-Ainda **não** há baseline numérico capturado nesta rodada (foco foi corrigir o
-crash). Métodos recomendados nesta máquina:
+## Baseline capturado (Rodada 2, sessão ao vivo)
+
+Medição qualitativa de recursos com o código novo já instalado e o plasmashell
+recarregado (Plasma 6.7.4 / Wayland):
+
+| Métrica | Valor observado |
+|---|---|
+| plasmashell RSS ocioso (todo o shell) | ~639–650 MB, **plano** (sem crescimento em ~50s) |
+| plasmashell CPU% após settle | decai de ~9% → ~6% e estabiliza |
+| Crash/segfault/coredump após deploy+restart | **nenhum** |
+| Erros QML do appsmenu no journal | **nenhum** |
+| `qmllint` (todo o projeto) | sem erros |
+
+> RSS aqui é do processo inteiro do plasmashell (papel de parede, todos os
+> widgets), não só do appsmenu. Serve como baseline de estabilidade/ausência de
+> leak, não como medida isolada do plasmoid.
+
+Ainda **falta** o baseline instrumentado de latência (abertura/first-paint/
+busca) — exige `console.time` temporário em `Component.onCompleted`/`onActivated`
+ou `gammaray`. Fica para a Rodada 3 (ver roadmap). Métodos:
 
 - **Tempo de abertura/primeiro paint:** `console.time`/`Date.now()` em
   `FullRepresentation.Component.onCompleted` e no `onActivated` de cada página.

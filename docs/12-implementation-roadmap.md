@@ -11,12 +11,14 @@ Ordem que respeita a prioridade da missão (correção → estabilidade → perf
 - [x] Validação por `qmllint` + `plasmoidviewer`.
 - [x] Documentação de auditoria/planos (docs 00–14).
 
-## Rodada 2 — Estabilização P1/P2
-- [ ] Guardas: `AllAppsPage` pós-pop, `SearchResultsPage` root.parent,
-      `AbstractKickoffItemDelegate`, `SectionView.onCompleted`.
-- [ ] Contrato de `contentArea` (Enter lança 1º resultado na busca).
-- [ ] Baseline de performance (doc 10) — medir antes das otimizações.
-- [ ] Teste de stress na sessão real (doc 11) e registrar resultado no doc 13.
+## Rodada 2 — Estabilização P1/P2 (parcial ✅)
+- [x] Guardas: `AllAppsPage` pós-pop + 2ª instância do crash hover→replace,
+      `SearchResultsPage` root.parent, `AbstractKickoffItemDelegate`,
+      `SectionView.onCompleted`.
+- [x] Baseline de estabilidade/recursos ao vivo (doc 10). Deploy + restart OK.
+- [ ] Contrato de `contentArea` (Enter lança 1º resultado na busca). — P2 pendente
+- [ ] Baseline **instrumentado** de latência (abertura/busca) — pendente (Rodada 3).
+- [ ] Teste de stress interativo na sessão real (checklist doc 11) — cabe ao usuário.
 
 ## Rodada 3 — Consolidação da arquitetura
 - [ ] `AllAppsPage` usando só `AccessibleGridView`+`AppDelegate`.

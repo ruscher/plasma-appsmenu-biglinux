@@ -38,3 +38,38 @@
 
 ### Docs
 - Criados `docs/00`–`docs/14`.
+
+### Deploy + validação ao vivo (autorizada pelo usuário)
+- Sincronizado repo → `~/.local/.../org.biglinux.appsmenu` (rsync, com backup).
+- `plasmashell` reiniciado via `systemctl --user restart plasma-plasmashell`
+  (o `kstart6` avulso não subiu; a via correta no Plasma 6 é o serviço systemd).
+- Estável: mesmo PID por >50s, RSS plano (~650 MB), CPU assentando, **0** crash,
+  **0** coredump, **0** erro QML no journal.
+- Nota: a "tempestade de hover" interativa não é automatizável de forma confiável
+  no Wayland (só `xdotool`/X11 disponível). O gatilho, porém, foi removido da
+  fonte. Teste interativo final fica para o usuário (checklist doc 11).
+- Push: `git push -u origin feature/rafael-personal-menu` (só a branch; main intacta).
+
+## 2026-09-19 — Rodada 2 (estabilização P1 + baseline)
+
+### Alterações de código
+`AllAppsPage.qml`
+- Novo helper `contentStack.switchView(component, objectName)`: ignora troca
+  redundante, adia `replace()` durante `busy`, aplica pendente em `onBusyChanged`.
+  Corrige a **segunda instância** do crash hover→replace (sidebar de categorias).
+- `onPreferred*Changed` e `Connections onCurrentIndexChanged` usam `switchView`.
+- `onHideSectionViewRequested`: guarda `currentItem`/`.view` pós-`pop()`.
+
+`SearchResultsPage.qml`
+- Guarda de `root.parent` no corpo do handler (l.84).
+
+`AbstractKickoffItemDelegate.qml` (legado vivo)
+- `enabled`/`text` guardam `model` nulo.
+
+`SectionView.qml`
+- `Component.onCompleted` retorna cedo se `model` nulo.
+
+### Validação
+- `qmllint`: OK em todos os alterados.
+- Deploy + restart do plasmashell: estável, sem crash/erro/coredump (baseline no
+  doc 10).

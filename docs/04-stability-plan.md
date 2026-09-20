@@ -14,20 +14,21 @@ Ordem = risco. Itens marcados ✅ foram feitos nesta rodada.
 - ✅ **Vazamento de `DataSource` por clique** e **`connectSource` sem
   desconectar.** — `InfoPage.qml` (`execSource.run()` + `onNewData: disconnect`).
 
-## Próximos (ordenados)
+## Feito na Rodada 2
 
-### P1 — Superfícies de exceção restantes
-1. **`AllAppsPage.qml:220-224`** — após `contentStack.pop()`, guardar
-   `currentItem` e a existência de `.view` antes de chamar
-   `positionViewAtIndex`/`currentIndex`.
-2. **`SearchResultsPage.qml:69-93`** — null-check consistente de `root.parent`
-   nos `Connections`/`HoverHandler` (o segundo já guarda; o primeiro não).
-3. **`AbstractKickoffItemDelegate.qml:97,100`** (legado vivo) — guardar
-   `model.disabled`/`model.name` como no `AppDelegate`. Alternativa preferível:
-   parar de usar a stack antiga (ver P4).
-4. **`SectionView.qml:74`** — o loop em `Component.onCompleted` sobre
-   `model.count`/`model.data(...)` roda cedo demais; validar `model` e adiar se
-   necessário.
+- ✅ **Segunda instância do crash hover→replace** — no `contentStack` interno do
+  `AllAppsPage` (hover em categoria muda `sideBar.currentIndex` → `replace()`).
+  Centralizado em `contentStack.switchView()` (ignora troca redundante, adia em
+  `busy`, aplica pendente em `onBusyChanged`).
+- ✅ **`AllAppsPage.qml` pós-`pop()`** — `onHideSectionViewRequested` agora guarda
+  `currentItem`/`.view` antes de desreferenciar.
+- ✅ **`SearchResultsPage.qml:84`** — deref de `root.parent.blockingHoverFocus`
+  agora guardado no corpo do handler.
+- ✅ **`AbstractKickoffItemDelegate.qml:97,100`** — `model.disabled`/`model.name`
+  guardados como no `AppDelegate`.
+- ✅ **`SectionView.qml`** — `Component.onCompleted` retorna cedo se `model` nulo.
+
+## Próximos (ordenados)
 
 ### P2 — Consistência funcional
 5. **`kickoff.contentArea`** — padronizar o que cada página expõe para que
