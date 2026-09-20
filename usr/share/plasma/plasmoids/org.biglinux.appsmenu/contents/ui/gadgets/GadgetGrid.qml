@@ -36,7 +36,7 @@ Item {
 
     signal layoutChanged()
     signal settingsRequested(var host)
-    // y (grid coords) of the dragged card's centre — lets the page auto-scroll
+    // y (grid coords) of the pointer while dragging — lets the page auto-scroll
     signal dragPointerMoved(real cy)
     // cache functions are injected by the page
     property var cacheGet: function(key) { return undefined }
@@ -178,30 +178,87 @@ Item {
     onSpacingChanged: relayout()
 
     // ── drag & drop ──
+    // The target slot follows the POINTER (not the card centre). A reorder is
+    // only applied after the pointer rests in a new cell for `dwellMs`, never
+    // while the page is auto-scrolling, so cards don't shuffle under you.
     property string dragUid: ""
-    property int lastDragCellRow: -1
-    property int lastDragCellCol: -1
+    property Item dragHost: null
+    property real pointerX: 0
+    property real pointerY: 0
+    property bool autoScrolling: false
+    property int dwellMs: 140
+    property int pendingRow: -1
+    property int pendingCol: -1
 
-    function dragStarted(uid) {
-        dragUid = uid
-        lastDragCellRow = -1; lastDragCellCol = -1
+    function hostForUid(uid) {
+        for (let i = 0; i < repeater.count; i++) {
+            const it = repeater.itemAt(i)
+            if (it && it.uid === uid) return it
+        }
+        return null
     }
-    function dragMoved(uid, cx, cy) {
-        dragPointerMoved(cy)
+    function cellAt(px, py) {
         const stepX = cellWidth + spacing, stepY = cellHeight + spacing
-        const col = Math.max(0, Math.min(columns - 1, Math.floor(cx / stepX)))
-        const row = Math.max(0, Math.floor(cy / stepY))
-        if (row === lastDragCellRow && col === lastDragCellCol) return
-        lastDragCellRow = row; lastDragCellCol = col
+        return { col: Math.max(0, Math.min(columns - 1, Math.floor(px / stepX))),
+                 row: Math.max(0, Math.floor(py / stepY)) }
+    }
+    function dragStarted(uid, hostItem) {
+        dragUid = uid
+        dragHost = hostItem || hostForUid(uid)
+        pendingRow = -1; pendingCol = -1
+        dwellTimer.stop()
+    }
+    // px/py: pointer position in grid coordinates
+    function dragMoved(uid, px, py) {
+        if (uid !== dragUid) return
+        pointerX = px; pointerY = py
+        dragPointerMoved(py)
+        const c = cellAt(px, py)
+        if (c.row === pendingRow && c.col === pendingCol) return
+        pendingRow = c.row; pendingCol = c.col
+        dwellTimer.restart()
+    }
+    // Called by the page while it auto-scrolls: keep the card under the
+    // pointer and postpone any reorder until scrolling settles.
+    function scrollBy(delta) {
+        if (!dragUid.length) return
+        pointerY += delta
+        if (dragHost) dragHost.dragY += delta
+        dwellTimer.restart()
+    }
+    onAutoScrollingChanged: if (!autoScrolling && dragUid.length) dwellTimer.restart()
 
+    Timer {
+        id: dwellTimer
+        interval: gadgetGrid.dwellMs
+        onTriggered: {
+            if (!gadgetGrid.dragUid.length || gadgetGrid.autoScrolling) return
+            gadgetGrid.applyTarget(gadgetGrid.pendingRow, gadgetGrid.pendingCol)
+        }
+    }
+    function applyTarget(row, col) {
+        const uid = dragUid
         const from = indexOfUid(uid)
         if (from < 0) return
+        const mine = positions[uid]
+        // pointer inside the card's own slot → nothing to do
+        if (mine && row >= mine.row && row < mine.row + mine.h && col >= mine.col && col < mine.col + mine.w) return
         const occupant = occupancy[row] ? occupancy[row][col] : undefined
         let to = -1
         if (occupant && occupant !== uid) {
             to = indexOfUid(occupant)
         } else if (!occupant && row >= rowsUsed) {
             to = layoutModel.count - 1
+        } else if (!occupant) {
+            // empty cell inside the grid: place after the nearest previous item in reading order
+            let best = -1
+            for (let r = row; r >= 0 && best < 0; r--) {
+                for (let cc = (r === row ? col : columns - 1); cc >= 0; cc--) {
+                    const o = occupancy[r] ? occupancy[r][cc] : undefined
+                    if (o && o !== uid) { best = indexOfUid(o); break }
+                }
+            }
+            to = best >= 0 ? (best < from ? best + 1 : best) : 0
         }
         if (to >= 0 && to !== from) {
             layoutModel.move(from, to, 1)
@@ -209,9 +266,54 @@ Item {
         }
     }
     function dragEnded(uid) {
+        dwellTimer.stop()
         dragUid = ""
+        dragHost = null
+        autoScrolling = false
         relayout()
         layoutChanged()
+    }
+
+    // ── ghost: where the dragged card will land ──
+    Rectangle {
+        id: ghost
+        readonly property var slot: gadgetGrid.dragUid.length ? gadgetGrid.positions[gadgetGrid.dragUid] : null
+        visible: slot !== null && slot !== undefined
+        z: 90
+        x: slot ? slot.x : 0
+        y: slot ? slot.y : 0
+        width: slot ? slot.w * gadgetGrid.cellWidth + (slot.w - 1) * gadgetGrid.spacing : 0
+        height: slot ? slot.h * gadgetGrid.cellHeight + (slot.h - 1) * gadgetGrid.spacing : 0
+        radius: Kirigami.Units.largeSpacing * 1.6
+        color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.14)
+        border.width: 2
+        border.color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.75)
+        Behavior on x { NumberAnimation { duration: Kirigami.Units.shortDuration; easing.type: Easing.OutCubic } }
+        Behavior on y { NumberAnimation { duration: Kirigami.Units.shortDuration; easing.type: Easing.OutCubic } }
+        Behavior on width { NumberAnimation { duration: Kirigami.Units.shortDuration } }
+        Behavior on height { NumberAnimation { duration: Kirigami.Units.shortDuration } }
+        // "skeleton" lines
+        Column {
+            anchors.centerIn: parent
+            spacing: Kirigami.Units.smallSpacing
+            opacity: 0.35
+            Rectangle { width: ghost.width * 0.45; height: 8; radius: 4; color: Kirigami.Theme.highlightColor }
+            Rectangle { width: ghost.width * 0.65; height: 8; radius: 4; color: Kirigami.Theme.highlightColor }
+            Rectangle { width: ghost.width * 0.35; height: 8; radius: 4; color: Kirigami.Theme.highlightColor }
+        }
+        Kirigami.Icon {
+            source: "arrow-down"
+            width: Kirigami.Units.iconSizes.smallMedium; height: width
+            anchors { top: parent.top; right: parent.right; margins: Kirigami.Units.smallSpacing }
+            color: Kirigami.Theme.highlightColor
+            opacity: 0.8
+        }
+        SequentialAnimation on opacity {
+            running: ghost.visible && Kirigami.Units.longDuration > 0
+            loops: Animation.Infinite
+            NumberAnimation { to: 0.55; duration: 650; easing.type: Easing.InOutSine }
+            NumberAnimation { to: 1.0; duration: 650; easing.type: Easing.InOutSine }
+        }
     }
 
     // ── cards ──

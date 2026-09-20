@@ -87,12 +87,20 @@ Item {
 
     // ── geometry from the grid's packing ──
     readonly property var slot: grid.positions[uid]
+    // While dragging the card follows the pointer in absolute grid coordinates
+    // (dragX/dragY). It must NOT be slot-relative: the card's own slot moves
+    // when the grid re-packs and the card would jump under the pointer.
+    property real dragX: 0
+    property real dragY: 0
+    // kept for API compatibility (scroll compensation adds to dragY)
     property real dragDX: 0
     property real dragDY: 0
+    onDragDYChanged: if (dragging && dragDY !== 0) { dragY += dragDY; dragDY = 0 }
+    onDragDXChanged: if (dragging && dragDX !== 0) { dragX += dragDX; dragDX = 0 }
     property bool dragging: false
 
-    x: (slot ? slot.x : 0) + (dragging ? dragDX : 0)
-    y: (slot ? slot.y : 0) + (dragging ? dragDY : 0)
+    x: dragging ? dragX : (slot ? slot.x : 0)
+    y: dragging ? dragY : (slot ? slot.y : 0)
     width: cols * cellWidth + (cols - 1) * grid.spacing
     height: rows * cellHeight + (rows - 1) * grid.spacing
     z: dragging ? 100 : (hovered ? 2 : 1)
@@ -103,6 +111,8 @@ Item {
     Behavior on height { enabled: Kirigami.Units.longDuration > 0; NumberAnimation { duration: Kirigami.Units.longDuration; easing.type: Easing.OutCubic } }
 
     scale: dragging ? 1.04 : 1.0
+    opacity: dragging ? 0.92 : 1.0
+    Behavior on opacity { NumberAnimation { duration: Kirigami.Units.shortDuration } }
     Behavior on scale { NumberAnimation { duration: Kirigami.Units.shortDuration; easing.type: Easing.OutCubic } }
 
     // iOS-like wiggle in edit mode
@@ -284,31 +294,33 @@ Item {
         id: dragLogic
         property real startX: 0
         property real startY: 0
+        // pointer offset inside the card at grab time (keeps the grab point fixed)
+        property real grabX: 0
+        property real grabY: 0
         property bool armed: false
-        property bool holdRequired: false
         function begin(mouse, fromTitle) {
             const p = host.mapToItem(host.grid, mouse.x, mouse.y)
             startX = p.x; startY = p.y
+            grabX = p.x - host.x; grabY = p.y - host.y
             armed = true
-            host.dragDX = 0; host.dragDY = 0
         }
         function move(mouse) {
             if (!armed) return
             const p = host.mapToItem(host.grid, mouse.x, mouse.y)
-            const dx = p.x - startX, dy = p.y - startY
             if (!host.dragging) {
-                if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return
+                if (Math.abs(p.x - startX) < 8 && Math.abs(p.y - startY) < 8) return
+                host.dragX = host.x; host.dragY = host.y   // start exactly where the card is
                 host.dragging = true
-                host.grid.dragStarted(host.uid)
+                host.grid.dragStarted(host.uid, host)
             }
-            host.dragDX = dx; host.dragDY = dy
-            host.grid.dragMoved(host.uid, host.x + host.width / 2, host.y + host.height / 2)
+            host.dragX = p.x - grabX; host.dragY = p.y - grabY
+            // the grid targets the pointer, not the card centre
+            host.grid.dragMoved(host.uid, p.x, p.y)
         }
         function end() {
             armed = false
             if (host.dragging) {
-                host.dragging = false
-                host.dragDX = 0; host.dragDY = 0
+                host.dragging = false   // x/y rebind to the slot and animate there
                 host.grid.dragEnded(host.uid)
             }
         }

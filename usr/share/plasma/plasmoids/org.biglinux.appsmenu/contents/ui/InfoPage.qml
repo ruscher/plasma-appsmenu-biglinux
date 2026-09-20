@@ -198,16 +198,39 @@ EmptyPage {
                 }
             }
 
-            // Auto-scroll while a card is dragged near the top/bottom edge
+            // Auto-scroll while a card is dragged into a narrow zone at the
+            // top/bottom edge. Speed grows with depth into the zone; the grid
+            // keeps the card under the pointer and postpones reordering.
+            property real dragViewportY: -1
             Connections {
                 target: grid
-                function onDragPointerMoved(cy) {
-                    const y = cy + grid.y - flick.contentY
-                    const edge = Kirigami.Units.gridUnit * 2
+                function onDragPointerMoved(cy) { flick.dragViewportY = cy + grid.y - flick.contentY }
+            }
+            Timer {
+                id: autoScroll
+                interval: 16
+                repeat: true
+                running: grid.dragUid.length > 0
+                readonly property real edge: Kirigami.Units.gridUnit * 1.6
+                onTriggered: {
+                    const y = flick.dragViewportY
                     const maxY = Math.max(0, flick.contentHeight - flick.height)
-                    if (y < edge) flick.contentY = Math.max(0, flick.contentY - 14)
-                    else if (y > flick.height - edge) flick.contentY = Math.min(maxY, flick.contentY + 14)
+                    let delta = 0
+                    if (y >= 0 && y < edge && flick.contentY > 0)
+                        delta = -(2 + 10 * (1 - y / edge))
+                    else if (y > flick.height - edge && y <= flick.height && flick.contentY < maxY)
+                        delta = 2 + 10 * (1 - (flick.height - y) / edge)
+                    if (delta !== 0) {
+                        const before = flick.contentY
+                        flick.contentY = Math.max(0, Math.min(maxY, before + delta))
+                        const applied = flick.contentY - before
+                        grid.autoScrolling = true
+                        if (applied !== 0) grid.scrollBy(applied)
+                    } else if (grid.autoScrolling) {
+                        grid.autoScrolling = false
+                    }
                 }
+                onRunningChanged: if (!running) { grid.autoScrolling = false; flick.dragViewportY = -1 }
             }
         }
 
