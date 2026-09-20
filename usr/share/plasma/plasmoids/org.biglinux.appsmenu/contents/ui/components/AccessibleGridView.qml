@@ -26,7 +26,23 @@ EmptyPage {
     property alias blockTargetWheel: wheelHandler.blockTargetWheel
     property alias view: view
 
+    // Empty state shown when the model has no rows. Set to "" to disable.
+    property string emptyText: i18nc("@info:status", "No applications here yet")
+
     clip: view.height < view.contentHeight
+
+    Loader {
+        anchors.centerIn: parent
+        width: parent ? parent.width - Kirigami.Units.gridUnit * 4 : 0
+        active: view.count === 0 && root.emptyText.length > 0
+        visible: active
+        asynchronous: true
+        sourceComponent: PlasmaExtras.PlaceholderMessage {
+            iconName: "edit-none"
+            text: root.emptyText
+            Accessible.role: Accessible.StaticText
+        }
+    }
 
     header: MouseArea {
         implicitHeight: Singletons.MenuSingleton.listItemMetrics.margins.top
@@ -104,10 +120,11 @@ EmptyPage {
         highlightMoveDuration: 0
         highlight: PlasmaExtras.Highlight {
             z: root.currentItem && root.currentItem.Drag.active ? 3 : 0
-            pressed: view.currentItem && view.currentItem.isPressed
+            pressed: !!view.currentItem && view.currentItem.isPressed === true
+            // searchField is null until Header binds it; guard so this stays bool
             active: view.activeFocus
                 || (kickoff.contentArea === root
-                    && kickoff.searchField.activeFocus)
+                    && !!kickoff.searchField && kickoff.searchField.activeFocus)
             width: view.cellWidth
             height: view.cellHeight
         }

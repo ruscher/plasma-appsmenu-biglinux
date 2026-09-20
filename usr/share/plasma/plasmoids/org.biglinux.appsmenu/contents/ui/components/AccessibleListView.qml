@@ -31,9 +31,28 @@ EmptyPage {
     property bool mainContentView: false
     property bool hasSectionView: false
 
+    // Empty state shown when the model has no rows (main content only).
+    // Set to "" to disable (sidebars, search page with its own placeholder).
+    property string emptyText: mainContentView ? i18nc("@info:status", "No applications here yet") : ""
+
     signal showSectionViewRequested(string sectionName)
 
     clip: view.height < view.contentHeight
+
+    Loader {
+        parent: root
+        anchors.centerIn: parent
+        width: parent ? parent.width - Kirigami.Units.gridUnit * 4 : 0
+        z: 1
+        active: view.count === 0 && root.emptyText.length > 0
+        visible: active
+        asynchronous: true
+        sourceComponent: PlasmaExtras.PlaceholderMessage {
+            iconName: "edit-none"
+            text: root.emptyText
+            Accessible.role: Accessible.StaticText
+        }
+    }
 
     header: MouseArea {
         implicitHeight: Singletons.MenuSingleton.listItemMetrics.margins.top
@@ -117,10 +136,12 @@ EmptyPage {
         highlightMoveDuration: 0
         highlight: PlasmaExtras.Highlight {
             z: root.currentItem && root.currentItem.Drag.active ? 3 : 0
-            pressed: view.currentItem && view.currentItem.isPressed && !view.currentItem.isCategoryListItem
+            // Coerce: a non-AppDelegate currentItem (e.g. sidebar ItemDelegate) has no isPressed
+            pressed: !!view.currentItem && view.currentItem.isPressed === true && view.currentItem.isCategoryListItem !== true
+            // searchField is null until Header binds it; guard so this stays bool
             active: view.activeFocus
                 || (kickoff.contentArea === root
-                    && kickoff.searchField.activeFocus)
+                    && !!kickoff.searchField && kickoff.searchField.activeFocus)
         }
 
         delegate: Delegates.AppDelegate {

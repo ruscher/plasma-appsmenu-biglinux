@@ -88,16 +88,8 @@ EmptyPage {
                                             scale: favBtn.hovered ? 1.04 : 1.0
                                             Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
                                         }
-
-                                        // ★ Star badge
-                                        Kirigami.Icon {
-                                            source: "starred-symbolic"
-                                            width: Kirigami.Units.iconSizes.small * 0.7
-                                            height: width
-                                            anchors { top: parent.top; right: parent.right; topMargin: -2; rightMargin: -2 }
-                                            color: "#FFD700"
-                                            Accessible.ignored: true
-                                        }
+                                        // No per-item star here: every item in the
+                                        // Favorites section is a favorite already.
                                     }
                                     PC3.Label {
                                         text: model.display || ""
@@ -313,9 +305,9 @@ EmptyPage {
             id: mouseArea
             anchors.fill: parent
             hoverEnabled: sectionRoot.hoverEnabled
-            onEntered: sectionRoot.hoveredChanged(true)
-            onExited: sectionRoot.hoveredChanged(false)
-            onClicked: mouse.accepted = false
+            // `hovered` is bound to containsMouse — it notifies by itself; emitting
+            // hoveredChanged(bool) by hand was invalid (signal takes no args).
+            onClicked: mouse => mouse.accepted = false
         }
 
         Layout.fillWidth: true
@@ -410,7 +402,9 @@ EmptyPage {
     component RecentItemDelegate : PC3.AbstractButton {
         id: recentBtn
         property var itemModel: null
-        property string itemIcon: ""
+        // `var`, not `string`: RecentUsageModel's decoration is a QIcon for
+        // files/folders (Kirigami.Icon.source accepts both).
+        property var itemIcon: ""
         property string itemName: ""
         property string itemDescription: ""
         property int itemIndex: 0

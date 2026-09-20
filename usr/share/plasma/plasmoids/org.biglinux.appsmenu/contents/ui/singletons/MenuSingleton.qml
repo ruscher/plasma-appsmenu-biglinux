@@ -63,7 +63,9 @@ Item {
         var vertPadding = Kirigami.Units.mediumSpacing * 2;
         return Math.max(iconSize, fontMetrics.height) + vertPadding;
     }
-    readonly property real compactListDelegateContentHeight: compactListDelegateHeight
+    // Content height only (no padding) — used for section-header font size and
+    // single-letter section width. Equal to the row height it made headers huge.
+    readonly property real compactListDelegateContentHeight: Math.max(Kirigami.Units.iconSizes.small, fontMetrics.height)
 
     // Accessibility constants
     readonly property real minimumTouchTarget: 44

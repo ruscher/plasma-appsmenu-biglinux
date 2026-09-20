@@ -30,8 +30,10 @@ EmptyPage {
         kickoff.contentArea = root
     }
 
-    // Expose the internal view for keyboard forwarding
+    // Expose the internal view for keyboard forwarding, and the current item
+    // so Header.onAccepted (Enter) can launch the top result.
     readonly property alias view: searchList.view
+    readonly property alias currentItem: searchList.currentItem
 
     // Action for Enter key
     property Item action: searchList.currentItem
@@ -40,6 +42,7 @@ EmptyPage {
         id: searchList
         mainContentView: true
         focus: true
+        emptyText: "" // this page renders its own "No matches" placeholder
 
         // Forces the function be re-run every time runnerModel.count changes
         model: kickoff.runnerModel.count ? kickoff.runnerModel.modelForRow(0) : null

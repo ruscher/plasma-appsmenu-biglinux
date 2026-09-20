@@ -46,7 +46,7 @@ EmptyPage {
             PC3.Label { text: value; font.pointSize: 11; font.weight: Font.DemiBold; elide: Text.ElideRight; Layout.fillWidth: true }
             PC3.Label { text: subValue; font: Kirigami.Theme.smallFont; opacity: 0.6; elide: Text.ElideRight; Layout.fillWidth: true; visible: text !== "" }
             Rectangle {
-                Layout.fillWidth: true; Layout.preferredHeight: 4; radius: 2; color: Qt.rgba(1,1,1,0.1)
+                Layout.fillWidth: true; Layout.preferredHeight: 4; radius: 2; color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.1)
                 Rectangle { width: parent.width * Math.max(0, Math.min(1, progress)); height: 4; radius: 2; color: progressColor }
             }
         }
@@ -78,7 +78,7 @@ EmptyPage {
     component QuickLinkButton : PC3.AbstractButton {
         property string btnLabel; property string btnIcon; property string btnCmd
         width: (parent.width - 20) / 2; height: 40; hoverEnabled: true
-        background: Rectangle { radius: 6; color: hovered ? Qt.rgba(1,1,1,0.1) : "transparent"; border.width: 1; border.color: Qt.rgba(1,1,1,0.05) }
+        background: Rectangle { radius: 6; color: hovered ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.1) : "transparent"; border.width: 1; border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.05) }
         contentItem: RowLayout {
             spacing: 8; anchors.centerIn: parent
             Kirigami.Icon { source: btnIcon; Layout.preferredWidth: 20; Layout.preferredHeight: 20 }
@@ -110,6 +110,18 @@ EmptyPage {
     P5Support.DataSource { id: memSource; engine: "executable"; connectedSources: ["free -b"]; interval: 3000 }
     P5Support.DataSource { id: diskSource; engine: "executable"; connectedSources: ["df -B1 /"]; interval: 30000 }
     P5Support.DataSource { id: gpuSource; engine: "executable"; connectedSources: ["lspci | grep -i 'vga\\|3d' | cut -d: -f3"]; interval: 0 }
+    // 1-minute load average + core count → CPU utilisation estimate (cheap, 5s)
+    P5Support.DataSource { id: loadSource; engine: "executable"; connectedSources: ["cat /proc/loadavg; nproc"]; interval: 5000 }
+
+    // Returns { load: <1-min load>, cores: <n> } or null while loading
+    function cpuLoad() {
+        const out = getStdout(loadSource).split("\n")
+        if (out.length < 2) return null
+        const load = parseFloat(out[0].trim().split(/\s+/)[0])
+        const cores = parseInt(out[1].trim())
+        if (isNaN(load) || isNaN(cores) || cores <= 0) return null
+        return { load: load, cores: cores }
+    }
 
     // Weather Source
     P5Support.DataSource { 
@@ -160,11 +172,18 @@ EmptyPage {
 
                 MonitorBlock {
                     Layout.fillWidth: true
-                    title: "CPU"; icon: "cpu-symbolic"; value: "Active"; subValue: getStdout(cpuInfoSource); progressColor: "#43A047"
+                    title: "CPU"; icon: "cpu-symbolic"; subValue: getStdout(cpuInfoSource); progressColor: Kirigami.Theme.positiveTextColor
+                    value: {
+                        const c = cpuLoad()
+                        if (!c) return "..."
+                        return i18nc("cpu usage percent, load average, core count", "%1% · load %2 · %3 cores",
+                                     Math.round(Math.min(1, c.load / c.cores) * 100), c.load.toFixed(2), c.cores)
+                    }
+                    progress: { const c = cpuLoad(); return c ? c.load / c.cores : 0 }
                 }
                 MonitorBlock {
                     Layout.fillWidth: true
-                    title: "RAM"; icon: "memory-symbolic"; progressColor: "#1E88E5"
+                    title: "RAM"; icon: "memory-symbolic"; progressColor: Kirigami.Theme.highlightColor
                     value: {
                         var out = getStdout(memSource).split("\n")
                         if (out.length > 1) {
@@ -184,7 +203,7 @@ EmptyPage {
                 }
                 MonitorBlock {
                     Layout.fillWidth: true
-                    title: "SWAP"; icon: "document-swap-symbolic"; progressColor: "#8E24AA"
+                    title: "SWAP"; icon: "document-swap-symbolic"; progressColor: Kirigami.Theme.neutralTextColor
                     value: {
                         var out = getStdout(memSource).split("\n")
                         if (out.length > 2) {
@@ -204,7 +223,7 @@ EmptyPage {
                 }
                 MonitorBlock {
                     Layout.fillWidth: true
-                    title: "DISK /"; icon: "drive-harddisk-symbolic"; progressColor: "#FB8C00"
+                    title: "DISK /"; icon: "drive-harddisk-symbolic"; progressColor: Kirigami.Theme.negativeTextColor
                     value: {
                         var out = getStdout(diskSource).split("\n")
                         if (out.length > 1) {
@@ -253,6 +272,7 @@ EmptyPage {
             // ─── BLOCO: CALENDÁRIO & HORA ───
             InfoCard {
                 Layout.fillWidth: true
+                visible: Plasmoid.configuration.infoShowCalendar
                 title: i18n("Date & Time")
                 icon: "view-calendar"
                 

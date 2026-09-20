@@ -23,12 +23,17 @@ import "../singletons" as Singletons
 T.ItemDelegate {
     id: root
 
-    // model properties (made optional for stability with different model types)
-    property var model: null
-    property int index: 0
-    property url url: ""
-    property var decoration: ""
-    property string description: ""
+    // Model properties. `model` and `index` MUST be `required`: a plain
+    // `property var model: null` shadows the context properties injected by
+    // ListView/GridView, so every delegate saw model === null and rendered
+    // blank (empty Apps grid, blank search rows). The remaining roles are
+    // derived from `model` with fallbacks so models lacking a role (e.g. the
+    // Places ListModel) still work; explicit bindings at the use site override.
+    required property var model
+    required property int index
+    property url url: (model && model.url) ? model.url : ""
+    property var decoration: model ? (model.decoration ?? "") : ""
+    property string description: model ? (model.description ?? "") : ""
 
     // "grid" or "list"
     property string displayMode: "list"
@@ -37,9 +42,14 @@ T.ItemDelegate {
     property bool isSearchResult: false
 
     readonly property Flickable view: ListView.view ?? GridView.view
-    readonly property bool hasActionList: model && (model.favoriteId !== null || ("hasActionList" in model && model.hasActionList === true))
-    readonly property bool isSeparator: model && (model.isSeparator === true)
-    readonly property bool isFavorite: model && model.favoriteId !== null && view && view.model && view.model.favoritesModel && view.model.favoritesModel.isFavorite(model.favoriteId)
+    // Always coerce to bool: models without these roles (e.g. the Places
+    // ListModel) yield `undefined`, which QML refuses to assign to a bool and
+    // which made hasActionList true for rows with no actionList at all.
+    readonly property bool hasFavoriteId: !!model && (model.favoriteId ?? null) !== null
+    readonly property bool hasActionList: !!model && (hasFavoriteId || model.hasActionList === true)
+    readonly property bool isSeparator: !!model && model.isSeparator === true
+    readonly property bool isFavorite: hasFavoriteId && !!view && !!view.model && !!view.model.favoritesModel
+        && view.model.favoritesModel.isFavorite(model.favoriteId) === true
 
     property int separatorHeight: Singletons.MenuSingleton.lineSvg.horLineHeight + (2 * Kirigami.Units.smallSpacing)
     property int itemHeight: Math.max(implicitBackgroundHeight + topInset + bottomInset, implicitContentHeight + topPadding + bottomPadding)
@@ -54,7 +64,9 @@ T.ItemDelegate {
     property bool labelTruncated: false
     property bool descriptionTruncated: false
     property bool descriptionVisible: displayMode === "list"
-    property Item dragIconItem: displayMode === "grid" ? gridIcon : listIcon
+    // Set by the loaded grid/list content; a binding to its own aliases
+    // (gridIcon/listIcon) was a binding loop.
+    property Item dragIconItem: null
 
     function openActionMenu(x = undefined, y = undefined) {
         if (!hasActionList) { return; }
@@ -158,12 +170,15 @@ T.ItemDelegate {
         : (compact ? Kirigami.Units.mediumSpacing : Kirigami.Units.smallSpacing)
     bottomPadding: topPadding
 
-    icon.width: {
+    // Single source for the icon size. `icon.height: icon.width` looped: the
+    // grouped `icon` property re-emits on every sub-property write.
+    readonly property int iconSize: {
         if (displayMode === "grid") return Kirigami.Units.iconSizes.large;
         if (compact || isCategoryListItem) return Kirigami.Units.iconSizes.small;
         return Kirigami.Units.iconSizes.medium;
     }
-    icon.height: icon.width
+    icon.width: iconSize
+    icon.height: iconSize
 
     MouseArea {
         id: mouseArea

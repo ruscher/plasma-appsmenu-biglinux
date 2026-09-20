@@ -28,9 +28,43 @@ EmptyPage {
     readonly property Item sideBarItem: sideBar
     readonly property Item contentAreaItem: contentStack
 
+    // First sidebar row that is actually shown (skips the hidden Favorites row,
+    // All Applications when disabled, and separator/top-level rows). Falls
+    // back to 0 (Favorites) when the model has no categories.
+    function firstVisibleCategoryRow() {
+        const rm = kickoff.rootModel
+        for (let i = 1; i < rm.count; i++) {
+            if (i === 1 && !Plasmoid.configuration.showAllApplications)
+                continue
+            if (rm.modelForRow(i))
+                return i
+        }
+        return 0
+    }
+    function componentForRow(row) {
+        if (row === 0) return contentStack.preferredFavoritesViewComponent
+        if (row === 1) return contentStack.preferredAllAppsViewComponent
+        return contentStack.preferredAppsViewComponent
+    }
+    function selectFirstVisibleCategory() {
+        sideBar.currentIndex = firstVisibleCategoryRow()
+    }
+
     T.StackView.onActivated: {
         kickoff.sideBar = sideBar
         kickoff.contentArea = contentStack.currentItem
+    }
+
+    Component.onCompleted: selectFirstVisibleCategory()
+
+    // AccessibleListView resets its view to row 0 (hidden Favorites) whenever
+    // the menu opens; re-select the first real category right after.
+    Connections {
+        target: kickoff
+        function onExpandedChanged() {
+            if (kickoff.expanded)
+                Qt.callLater(root.selectFirstVisibleCategory)
+        }
     }
 
     contentItem: RowLayout {
@@ -56,21 +90,47 @@ EmptyPage {
 
             delegate: PC3.ItemDelegate {
                 id: categoryDelegate
-                width: sideBar.width
-                height: visible ? implicitHeight : 0
-                // Hide Favorites (index 0) and respect Plasmoid config for All Applications (index 1)
-                visible: index > 0 && !(index === 1 && !Plasmoid.configuration.showAllApplications)
+                required property var model
+                required property int index
 
-                text: model.display
-                icon.name: (model.display === "WebApps" || model.display === "Web Apps") 
-                           ? "/usr/share/icons/hicolor/scalable/apps/big-webapps-symbolic.svg" 
-                           : model.decoration
+                // The sub-model of this row; null for separators and top-level
+                // items, so it doubles as "is this a real category?".
+                readonly property var subModel: kickoff.rootModel.modelForRow(index)
+                readonly property int appCount: subModel ? subModel.count : 0
+                // Hide Favorites (index 0), respect the All Applications setting
+                // (index 1), and never show separator/non-category rows.
+                readonly property bool shown: index > 0
+                    && !(index === 1 && !Plasmoid.configuration.showAllApplications)
+                    && subModel !== null
+
+                width: sideBar.width
+                height: shown ? implicitHeight : 0
+                visible: shown
+
+                text: model.display ?? ""
+                icon.name: (model.display === "WebApps" || model.display === "Web Apps")
+                           ? "/usr/share/icons/hicolor/scalable/apps/big-webapps-symbolic.svg"
+                           : (model.decoration ?? "")
+                rightPadding: countLabel.visible ? countLabel.width + Kirigami.Units.largeSpacing * 2 : Kirigami.Units.largeSpacing
 
                 highlighted: ListView.isCurrentItem
 
-                Accessible.name: model.display
+                Accessible.name: appCount > 0 ? i18nc("category name, app count", "%1 (%2)", text, appCount) : text
                 Accessible.role: Accessible.MenuItem
                 Accessible.description: i18n("Application category")
+
+                // App count badge (secondary info, never the only indicator)
+                PC3.Label {
+                    id: countLabel
+                    anchors.right: parent.right
+                    anchors.rightMargin: Kirigami.Units.largeSpacing
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: categoryDelegate.appCount > 0
+                    text: categoryDelegate.appCount
+                    font: Kirigami.Theme.smallFont
+                    color: categoryDelegate.highlighted ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.disabledTextColor
+                    Accessible.ignored: true
+                }
 
                 onClicked: {
                     sideBar.currentIndex = index
@@ -79,7 +139,7 @@ EmptyPage {
 
                 hoverEnabled: true
                 onHoveredChanged: {
-                    if (hovered) sideBar.currentIndex = index
+                    if (hovered && shown) sideBar.currentIndex = index
                 }
 
                 Keys.onRightPressed: event => {
@@ -144,10 +204,12 @@ EmptyPage {
             readonly property string preferredAppsViewObjectName: Plasmoid.configuration.applicationsDisplay === 0 ? "applicationsGridView" : "applicationsListView"
             readonly property Component preferredAppsViewComponent: Plasmoid.configuration.applicationsDisplay === 0 ? applicationsGridViewComponent : applicationsListViewComponent
 
-            property int appsModelRow: 0
+            // Start directly on the first visible category so the initial view
+            // matches the highlighted sidebar row (no favorites→category flash).
+            property int appsModelRow: Math.max(root.firstVisibleCategoryRow(), 0)
             readonly property Kicker.AppsModel appsModel: kickoff.rootModel.modelForRow(appsModelRow)
 
-            initialItem: preferredFavoritesViewComponent
+            initialItem: root.componentForRow(root.firstVisibleCategoryRow())
 
             // Safe view switching: skip redundant switches and never call
             // replace() while a transition is running (defer it). Same crash

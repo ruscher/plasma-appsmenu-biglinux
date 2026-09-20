@@ -2,85 +2,175 @@
     SPDX-FileCopyrightText: 2024 BigLinux Team
     SPDX-License-Identifier: GPL-2.0-or-later
 
-    ConfigGeneral — Configurações detalhadas para Home e Info
+    ConfigGeneral — settings for Appearance, Applications, Home and Info.
+
+    Plasma binds each `cfg_<key>` property to the matching main.xml entry.
+    (Plain `id`s do NOT bind — the previous page never saved anything.)
 */
 
 import QtQuick 2.15
-import QtQuick.Controls 2.15
+import QtQuick.Controls 2.15 as QQC2
 import QtQuick.Layouts 1.15
 import org.kde.kirigami 2.20 as Kirigami
+import org.kde.kcmutils as KCM
 
-Kirigami.FormLayout {
+KCM.SimpleKCM {
     id: root
 
-    // ─── SEÇÃO HOME ───
-    Kirigami.Separator { Kirigami.FormData.label: i18n("Home Dashboard") }
-    
-    CheckBox {
-        Kirigami.FormData.label: i18n("Recent Sections:")
-        text: i18n("Show Recent Applications")
-        id: showRecentSection
-    }
-    CheckBox {
-        text: i18n("Show Recent Files")
-        id: showRecentFiles
-    }
-    CheckBox {
-        text: i18n("Show Recent Folders")
-        id: showRecentFolders
-    }
-    
-    SpinBox {
-        Kirigami.FormData.label: i18n("Max Items (Apps):")
-        id: recentAppsMax
-        from: 1; to: 20
-    }
-    SpinBox {
-        Kirigami.FormData.label: i18n("Max Items (Files):")
-        id: recentFilesMax
-        from: 1; to: 20
-    }
+    // ── Appearance ──
+    property alias cfg_useSymbolicIcons: useSymbolicIcons.checked
+    property alias cfg_compactMode: compactMode.checked
 
-    // ─── SEÇÃO INFO ───
-    Kirigami.Separator { Kirigami.FormData.label: i18n("Info Page Widgets") }
+    // ── Applications ──
+    property alias cfg_showAllApplications: showAllApplications.checked
+    property alias cfg_alphaSort: alphaSort.checked
+    property int cfg_applicationsDisplay
+    property int cfg_favoritesDisplay
 
-    CheckBox {
-        Kirigami.FormData.label: i18n("Visible Widgets:")
-        text: i18n("Hardware Monitor (CPU, RAM, etc.)")
-        id: infoShowHardwareMonitor
-    }
-    CheckBox {
-        text: i18n("System Information (Kernel, Shell, etc.)")
-        id: infoShowSystemInfo
-    }
-    CheckBox {
-        text: i18n("Calendar & Clock")
-        id: infoShowCalendar
-    }
-    CheckBox {
-        text: i18n("Weather Information")
-        id: infoShowWeather
-    }
-    CheckBox {
-        text: i18n("Quick Links")
-        id: infoShowQuickLinks
-    }
-    CheckBox {
-        text: i18n("Phoronix News Feed")
-        id: infoShowNews
-    }
+    // ── Home ──
+    property alias cfg_showRecentSection: showRecentSection.checked
+    property alias cfg_showRecentFiles: showRecentFiles.checked
+    property alias cfg_showRecentFolders: showRecentFolders.checked
+    property alias cfg_showFrequentSection: showFrequentSection.checked
+    property alias cfg_recentAppsMax: recentAppsMax.value
+    property alias cfg_recentFilesMax: recentFilesMax.value
+    property alias cfg_recentFoldersMax: recentFoldersMax.value
 
-    // ─── OUTROS ───
-    Kirigami.Separator { Kirigami.FormData.label: i18n("General Interface") }
+    // ── Info ──
+    property alias cfg_infoShowHardwareMonitor: infoShowHardwareMonitor.checked
+    property alias cfg_infoShowSystemInfo: infoShowSystemInfo.checked
+    property alias cfg_infoShowCalendar: infoShowCalendar.checked
+    property alias cfg_infoShowWeather: infoShowWeather.checked
+    property alias cfg_infoShowQuickLinks: infoShowQuickLinks.checked
+    property alias cfg_infoShowNews: infoShowNews.checked
 
-    CheckBox {
-        Kirigami.FormData.label: i18n("Aesthetics:")
-        text: i18n("Use Symbolic Icons")
-        id: useSymbolicIcons
-    }
-    
-    CheckBox {
-        text: i18n("Show Smart Suggestions (AI)")
-        id: showSmartSection
+    Kirigami.FormLayout {
+        id: form
+
+        // ─── APPEARANCE ───
+        Kirigami.Separator {
+            Kirigami.FormData.isSection: true
+            Kirigami.FormData.label: i18n("Appearance")
+        }
+        QQC2.CheckBox {
+            id: useSymbolicIcons
+            Kirigami.FormData.label: i18n("Icons:")
+            text: i18n("Use symbolic (monochrome) category icons")
+        }
+        QQC2.CheckBox {
+            id: compactMode
+            Kirigami.FormData.label: i18n("Lists:")
+            text: i18n("Compact list items")
+        }
+
+        // ─── APPLICATIONS ───
+        Kirigami.Separator {
+            Kirigami.FormData.isSection: true
+            Kirigami.FormData.label: i18n("Applications")
+        }
+        QQC2.CheckBox {
+            id: showAllApplications
+            Kirigami.FormData.label: i18n("Categories:")
+            text: i18n("Show an \"All Applications\" category")
+        }
+        QQC2.CheckBox {
+            id: alphaSort
+            text: i18n("Sort alphabetically")
+        }
+        QQC2.RadioButton {
+            id: appsGrid
+            Kirigami.FormData.label: i18n("Show applications as:")
+            text: i18n("Grid")
+            checked: root.cfg_applicationsDisplay === 0
+            onToggled: if (checked) root.cfg_applicationsDisplay = 0
+        }
+        QQC2.RadioButton {
+            id: appsList
+            text: i18n("List")
+            checked: root.cfg_applicationsDisplay === 1
+            onToggled: if (checked) root.cfg_applicationsDisplay = 1
+        }
+        QQC2.RadioButton {
+            id: favsGrid
+            Kirigami.FormData.label: i18n("Show favorites as:")
+            text: i18n("Grid")
+            checked: root.cfg_favoritesDisplay === 0
+            onToggled: if (checked) root.cfg_favoritesDisplay = 0
+        }
+        QQC2.RadioButton {
+            id: favsList
+            text: i18n("List")
+            checked: root.cfg_favoritesDisplay === 1
+            onToggled: if (checked) root.cfg_favoritesDisplay = 1
+        }
+
+        // ─── HOME ───
+        Kirigami.Separator {
+            Kirigami.FormData.isSection: true
+            Kirigami.FormData.label: i18n("Home")
+        }
+        QQC2.CheckBox {
+            id: showRecentSection
+            Kirigami.FormData.label: i18n("Sections:")
+            text: i18n("Recent applications")
+        }
+        QQC2.CheckBox {
+            id: showRecentFiles
+            text: i18n("Recent files")
+        }
+        QQC2.CheckBox {
+            id: showRecentFolders
+            text: i18n("Recent folders")
+        }
+        QQC2.CheckBox {
+            id: showFrequentSection
+            text: i18n("Frequently used")
+        }
+        QQC2.SpinBox {
+            id: recentAppsMax
+            Kirigami.FormData.label: i18n("Max recent applications:")
+            from: 1; to: 20
+        }
+        QQC2.SpinBox {
+            id: recentFilesMax
+            Kirigami.FormData.label: i18n("Max recent files:")
+            from: 1; to: 20
+        }
+        QQC2.SpinBox {
+            id: recentFoldersMax
+            Kirigami.FormData.label: i18n("Max recent folders:")
+            from: 1; to: 20
+        }
+
+        // ─── INFO ───
+        Kirigami.Separator {
+            Kirigami.FormData.isSection: true
+            Kirigami.FormData.label: i18n("Info")
+        }
+        QQC2.CheckBox {
+            id: infoShowHardwareMonitor
+            Kirigami.FormData.label: i18n("Widgets:")
+            text: i18n("Hardware monitor (CPU, RAM, swap, disk)")
+        }
+        QQC2.CheckBox {
+            id: infoShowSystemInfo
+            text: i18n("System details (hostname, kernel, shell, uptime)")
+        }
+        QQC2.CheckBox {
+            id: infoShowCalendar
+            text: i18n("Date & time")
+        }
+        QQC2.CheckBox {
+            id: infoShowWeather
+            text: i18n("Weather (needs internet)")
+        }
+        QQC2.CheckBox {
+            id: infoShowQuickLinks
+            text: i18n("Quick links")
+        }
+        QQC2.CheckBox {
+            id: infoShowNews
+            text: i18n("Phoronix news feed (needs internet)")
+        }
     }
 }
