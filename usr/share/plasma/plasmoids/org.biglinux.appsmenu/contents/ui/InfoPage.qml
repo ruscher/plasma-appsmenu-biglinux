@@ -55,6 +55,9 @@ EmptyPage {
             const rawCache = Plasmoid.configuration.gadgetCache
             cache = rawCache && rawCache.length > 2 ? JSON.parse(rawCache) : {}
         } catch (e) { cache = {} }
+        /*  grid.load() is what assigns the uids, so ask it what is on the
+            board rather than trusting the serialised items.  */
+        pruneCache(grid.serialize())
         loaded = true
     }
     function saveLayoutNow() {
@@ -77,6 +80,40 @@ EmptyPage {
             try { Plasmoid.configuration.gadgetCache = JSON.stringify(root.cache) } catch (e) {}
         }
     }
+    /*  The cache is persisted into the plasmoid config and nothing ever
+        removed a stale entry, so every gadget the user dropped, re-added or
+        reset left its payload behind for good — a real config grew to seven
+        orphaned weather and seven orphaned currency entries, each holding a
+        full forecast or rate table.
+
+        Entries are addressed either by the instance uid (host.cacheSet) or by
+        the gadget id (host.sharedCacheSet), so a key is worth keeping only
+        while one of those is still on the board.  */
+    function pruneCache(items) {
+        if (!root.cache) {
+            return
+        }
+        const live = {}
+        for (const it of items) {
+            if (it.uid) live[it.uid] = true
+            if (it.id) live[it.id] = true
+        }
+        const kept = {}
+        let dropped = 0
+        for (const key in root.cache) {
+            const prefix = key.substring(0, key.indexOf(":"))
+            if (prefix.length > 0 && live[prefix]) {
+                kept[key] = root.cache[key]
+            } else {
+                dropped++
+            }
+        }
+        if (dropped > 0) {
+            root.cache = kept
+            cacheSaveTimer.restart()
+        }
+    }
+
     function cacheGet(key) { return root.cache ? root.cache[key] : undefined }
     function cacheSet(key, value) {
         const c = Object.assign({}, root.cache)

@@ -19,10 +19,35 @@ Item {
     required property var host
 
     readonly property int refreshMs: 20 * 60 * 1000
+
     readonly property bool autoLocate: host.cfg.auto !== undefined ? host.cfg.auto : true
-    readonly property string unit: host.cfg.unit || "c"
-    property var wx: null
+    readonly property string unit: host.cfg.unit === "f" ? "f" : "c"
+    readonly property string queryText: (host.cfg.query || "").trim()
+
+    /*  What decides *which* forecast to show: the chosen location and the
+        unit. Everything else in cfg — the resolved coordinates and display
+        name — is a result of a request, so writing it back must not start a
+        new one. That is why the refresh trigger below compares this key
+        instead of reacting to cfgChanged directly: GadgetHost emits
+        cfgChanged twice for a single save (once locally, once through the
+        model round trip), and the resolved coordinates add a third.  */
+    readonly property string requestKey: (autoLocate ? "auto" : "city:" + queryText.toLowerCase()) + "|" + unit
+
+    /*  requestKey of the request that is in flight or already on screen. */
+    property string servedKey: ""
+    /*  Bumped by every request. A reply carrying a stale id belongs to a
+        request the user has already replaced, so it is dropped instead of
+        overwriting newer data.  */
+    property int requestId: 0
     property bool busy: false
+    property var wx: null
+
+    /*  A location that cannot be resolved never fills the cache, so without
+        this the gadget would fire a fresh request every time it scrolls back
+        into the viewport. Automatic refreshes keep a floor between attempts;
+        an explicit refresh from the settings page is never delayed.  */
+    readonly property int minRetryMs: 60 * 1000
+    property double lastAttemptAt: 0
 
     function t(key) {
         // translatable condition names (keys come from the provider)
@@ -38,15 +63,18 @@ Item {
     Component.onCompleted: {
         host.accent = "#0ea5e9"
         host.settingsComponent = settings
-        const cached = host.cacheGet("forecast")
-        if (cached && cached.v) { wx = cached.v; host.subtitle = wx.location || "" }
+        servedKey = requestKey
+        const cached = cachedForecast()
+        if (cached) {
+            show(cached.v)
+        }
         refreshIfStale()
     }
 
     Connections {
         target: weather.host
         function onActiveChanged() { if (weather.host.active) weather.refreshIfStale() }
-        function onCfgChanged() { weather.refresh(true) }
+        function onCfgChanged() { weather.handleCfgChanged() }
     }
     Timer {
         interval: weather.refreshMs
@@ -55,45 +83,163 @@ Item {
         onTriggered: weather.refreshIfStale()
     }
 
-    function refreshIfStale() {
-        const cached = host.cacheGet("forecast")
-        if (!Net.cacheFresh(cached, refreshMs)) refresh(false)
+    /*  The gadget cache is one JSON object persisted into the plasmoid config
+        and it is never pruned, so the forecast lives in a single slot rather
+        than one slot per city. The payload records the scope it was fetched
+        for and that scope is checked on every read: a mismatch is a miss, so
+        a Celsius forecast is never shown as Fahrenheit and Brasília's is
+        never shown for São Paulo.  */
+    function cachedForecast() {
+        const e = host.cacheGet("forecast")
+        if (!e || !e.v) {
+            return null
+        }
+        const v = e.v
+        if (v.scopeKey !== requestKey || v.unitKey !== unit) {
+            return null
+        }
+        /*  For a manually chosen city the coordinates must also match the ones
+            currently resolved, in case the city was re-resolved since.  */
+        if (!autoLocate && host.cfg.lat !== undefined
+                && !(sameCoord(v.lat, host.cfg.lat) && sameCoord(v.lon, host.cfg.lon))) {
+            return null
+        }
+        return e
     }
+
+    function sameCoord(a, b) {
+        return typeof a === "number" && typeof b === "number" && Math.abs(a - b) < 0.0001
+    }
+
+    function refreshIfStale() {
+        if (Net.cacheFresh(cachedForecast(), refreshMs)) {
+            return
+        }
+        if (busy || Date.now() - lastAttemptAt < minRetryMs) {
+            return
+        }
+        refresh(false)
+    }
+
+    /*  A new request always supersedes whatever is in flight — there is no
+        "already busy, give up" guard. The previous version returned from the
+        geocoding branch without ever clearing `busy`, and the `if (busy)
+        return` at the top then rejected every later refresh, so the gadget
+        span forever and never showed the city the user had typed.  */
     function refresh(force) {
-        if (busy) return
-        busy = true; host.loading = true; host.clearError()
-        const done = (err, fc, loc) => {
-            busy = false; host.loading = false
-            if (err) {
-                host.offline = true
-                if (!wx) host.setError(err === "notfound" ? i18n("Location not found. Check the settings.") : i18n("Could not load the weather (%1).", Net.describeError(err)))
+        const id = ++requestId
+        servedKey = requestKey
+        lastAttemptAt = Date.now()
+
+        if (!force) {
+            const cached = cachedForecast()
+            if (Net.cacheFresh(cached, refreshMs)) {
+                show(cached.v)
                 return
             }
-            host.offline = false
-            fc.location = loc.name
-            wx = fc
-            host.subtitle = loc.name
-            host.cacheSet("forecast", Net.cacheEntry(fc))
         }
-        const run = loc => Provider.forecast(loc.lat, loc.lon, unit, (err, fc) => done(err, fc, loc))
-        if (!autoLocate && host.cfg.query && host.cfg.query.length) {
-            if (host.cfg.lat !== undefined && host.cfg.lon !== undefined && host.cfg.resolvedFor === host.cfg.query) {
-                run({ lat: host.cfg.lat, lon: host.cfg.lon, name: host.cfg.name || host.cfg.query })
+
+        busy = true
+        host.loading = true
+        host.clearError()
+
+        const run = loc => Provider.forecast(loc.lat, loc.lon, unit, (err, fc) => finish(id, err, fc, loc))
+
+        if (autoLocate) {
+            const cachedLoc = host.cacheGet("iploc")
+            if (Net.cacheFresh(cachedLoc, 6 * 60 * 60 * 1000)) {
+                run(cachedLoc.v)
             } else {
-                Provider.geocode(host.cfg.query, (err, loc) => {
-                    if (err) return done(err, null, null)
-                    const c = Object.assign({}, host.cfg, { lat: loc.lat, lon: loc.lon, name: loc.name, resolvedFor: host.cfg.query })
-                    host.saveCfg(c)  // triggers onCfgChanged → will run with the cached coords
+                Provider.locateByIp((err, loc) => {
+                    if (id !== requestId) return
+                    if (err) { finish(id, err, null, null); return }
+                    host.cacheSet("iploc", Net.cacheEntry(loc))
+                    run(loc)
                 })
             }
-        } else {
-            const cachedLoc = host.cacheGet("iploc")
-            if (Net.cacheFresh(cachedLoc, 6 * 60 * 60 * 1000)) run(cachedLoc.v)
-            else Provider.locateByIp((err, loc) => {
-                if (err) return done(err, null, null)
-                host.cacheSet("iploc", Net.cacheEntry(loc))
-                run(loc)
-            })
+            return
+        }
+
+        if (!queryText.length) {
+            finish(id, "nocity", null, null)
+            return
+        }
+
+        const c = host.cfg
+        if (c.lat !== undefined && c.lon !== undefined && c.resolvedFor === queryText) {
+            run({ lat: c.lat, lon: c.lon, name: c.name || queryText })
+            return
+        }
+
+        Provider.geocode(queryText, (err, loc) => {
+            if (id !== requestId) return
+            if (err) { finish(id, err, null, null); return }
+            /*  Remember the resolution so the next open skips the geocoding
+                round trip. requestKey does not depend on these fields, so
+                this save does not restart the request: we carry straight on
+                with the coordinates we just received.  */
+            host.saveCfg(Object.assign({}, host.cfg, {
+                lat: loc.lat, lon: loc.lon, name: loc.name, resolvedFor: queryText
+            }))
+            run(loc)
+        })
+    }
+
+    /*  The single exit point of a request: every path that ends one, success
+        or failure, comes through here, so `busy` and `host.loading` can never
+        be left stuck on.  */
+    function finish(id, err, fc, loc) {
+        if (id !== requestId) {
+            return  // superseded; the newer request owns the state
+        }
+        busy = false
+        host.loading = false
+
+        if (err === "nocity") {
+            host.setError(i18n("Type a city name in the settings."))
+            return
+        }
+        if (err === "notfound") {
+            /*  A typo is the user's to fix and says nothing about the network,
+                so it is reported even when an older forecast is on screen.  */
+            host.setError(autoLocate ? i18n("Could not determine your location.")
+                                     : i18n("City not found. Check the spelling in the settings."))
+            return
+        }
+        if (err) {
+            host.offline = true
+            if (!wx) {
+                host.setError(i18n("Could not load the weather (%1).", Net.describeError(err)))
+            }
+            return
+        }
+
+        host.offline = false
+        fc.location = loc.name
+        fc.scopeKey = servedKey
+        host.cacheSet("forecast", Net.cacheEntry(fc))
+        show(fc)
+    }
+
+    function show(fc) {
+        wx = fc
+        host.subtitle = fc.location || ""
+        host.clearError()
+    }
+
+    /*  cfgChanged fires more than once per settings change, so react to what
+        actually changed rather than to the signal.  */
+    function handleCfgChanged() {
+        if (requestKey !== servedKey) {
+            refresh(true)
+            return
+        }
+        /*  Same key, but the settings page cleared `resolvedFor`: the user
+            re-applied the same city, which is an explicit retry. `busy`
+            filters out the duplicate emissions of a single save, which all
+            arrive before any network reply.  */
+        if (!autoLocate && queryText.length && host.cfg.resolvedFor !== queryText && !busy) {
+            refresh(true)
         }
     }
 
