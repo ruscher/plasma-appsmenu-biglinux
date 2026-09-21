@@ -90,9 +90,13 @@ QtObject {
         { id: "gallery",      name: i18n("Gallery"),         icon: "folder-pictures",        category: "tools",
           description: i18n("Slideshow of a folder of pictures"),
           sizes: ["1x1", "2x1", "2x2"], defaultSize: "1x1", source: "GalleryGadget.qml", online: false, multiple: true },
-        { id: "puzzle",       name: i18n("2048"),            icon: "applications-games",     category: "tools",
-          description: i18n("Slide the tiles and reach 2048"),
-          sizes: ["1x1", "2x2"], defaultSize: "1x1", source: "PuzzleGadget.qml", online: false, multiple: false },
+        /*  One entry for all five games. "puzzle" was the 2048-only gadget
+            and is migrated to this on load, keeping its position and its high
+            score. 1x1 is gone from the sizes: a board plus a game selector
+            needs the extra row, and Sudoku asks for 2x2 on top of that.  */
+        { id: "games",        name: i18n("Games"),           icon: "applications-games",     category: "tools",
+          description: i18n("2048, Minesweeper, Sudoku, Flow Connect and Block Puzzle"),
+          sizes: ["1x2", "2x2", "2x1"], defaultSize: "1x2", source: "GamesGadget.qml", online: false, multiple: false },
     ]
 
     function byId(id) {

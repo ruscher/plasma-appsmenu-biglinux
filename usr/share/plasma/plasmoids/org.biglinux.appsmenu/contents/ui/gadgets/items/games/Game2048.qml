@@ -6,6 +6,9 @@
     Tiles are kept as individual items so they slide and merge instead of
     blinking into place. No timers; nothing runs while the menu is closed.
 
+    Loaded by GamesGadget. It keeps its original `cfg.best` key so a high
+    score saved before the games were gathered under one gadget survives.
+
     cfg: { best }
 */
 

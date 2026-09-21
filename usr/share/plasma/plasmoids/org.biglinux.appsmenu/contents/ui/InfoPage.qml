@@ -50,6 +50,7 @@ EmptyPage {
         if (!items || items.length === 0) {
             items = Gadgets.GadgetRegistry.defaultLayout.map(d => ({ id: d.id, size: d.size }))
         }
+        items = migrate(items)
         grid.load(items)
         try {
             const rawCache = Plasmoid.configuration.gadgetCache
@@ -60,6 +61,29 @@ EmptyPage {
         pruneCache(grid.serialize())
         loaded = true
     }
+    /*  Renames a gadget has been through, applied on load so an existing
+        board keeps its place and its settings instead of silently losing the
+        gadget. "puzzle" was the 2048-only card; it is now one game inside
+        "games", which reads the same `best` key.  */
+    function migrate(items) {
+        let changed = false
+        const out = items.map(it => {
+            if (it.id !== "puzzle") {
+                return it
+            }
+            changed = true
+            const cfg = Object.assign({}, it.cfg || {}, { game: "2048" })
+            /*  1x1 no longer exists for this gadget: it now carries a game
+                selector above the board. */
+            const size = (it.size === "1x1" || !it.size) ? "1x2" : it.size
+            return Object.assign({}, it, { id: "games", size: size, cfg: cfg })
+        })
+        if (changed) {
+            Qt.callLater(root.saveLayoutNow)
+        }
+        return out
+    }
+
     function saveLayoutNow() {
         if (!loaded) return
         Plasmoid.configuration.gadgetLayout = JSON.stringify({ v: 1, items: grid.serialize() })
