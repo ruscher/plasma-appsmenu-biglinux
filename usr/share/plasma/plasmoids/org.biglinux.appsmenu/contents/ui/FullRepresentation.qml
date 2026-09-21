@@ -62,7 +62,6 @@ EmptyPage {
     // ── HEADER (always on top) ──
     header: Header {
         id: header
-        preferredNameAndIconWidth: root.preferredSideBarWidth
         Binding {
             target: kickoff
             property: "header"
@@ -283,7 +282,7 @@ EmptyPage {
                     checkable: true
                     checked: navBar.currentIndex === 0
                     hoverEnabled: true
-                    onClicked: navBar.currentIndex = 0
+                    onClicked: root.activateTab(0)
 
                     Accessible.name: i18n("Home")
                     Accessible.role: Accessible.PageTab
@@ -327,7 +326,7 @@ EmptyPage {
                     checkable: true
                     checked: navBar.currentIndex === 1
                     hoverEnabled: true
-                    onClicked: navBar.currentIndex = 1
+                    onClicked: root.activateTab(1)
 
                     Accessible.name: i18n("Apps")
                     Accessible.role: Accessible.PageTab
@@ -371,7 +370,7 @@ EmptyPage {
                     checkable: true
                     checked: navBar.currentIndex === 2
                     hoverEnabled: true
-                    onClicked: navBar.currentIndex = 2
+                    onClicked: root.activateTab(2)
 
                     Accessible.name: i18n("Places")
                     Accessible.role: Accessible.PageTab
@@ -415,7 +414,7 @@ EmptyPage {
                     checkable: true
                     checked: navBar.currentIndex === 3
                     hoverEnabled: true
-                    onClicked: navBar.currentIndex = 3
+                    onClicked: root.activateTab(3)
 
                     Accessible.name: i18n("Info")
                     Accessible.role: Accessible.PageTab
@@ -486,6 +485,52 @@ EmptyPage {
 
     Components.OnboardingOverlay {
         anchors.fill: parent
+    }
+
+    // Single entry point for "the user asked for this tab".
+    //
+    // Clicking a tab has to work while a search is running, including a click
+    // on the tab that was already selected — the case that used to do nothing
+    // at all, because `navBar.currentIndex = n` emits no change signal when the
+    // value is unchanged, and because onCurrentIndexChanged refuses to switch
+    // pages while the query is non-empty.
+    //
+    // Order matters here. The index is set *before* the query is cleared, so
+    // that the searchTextChanged handler — which fires on clear and switches
+    // back to navBar.currentIndex — lands on the tab the user just asked for
+    // rather than the one they came from. The explicit switchToTab() below is
+    // then a no-op in that path, and does the work when no search was running.
+    function activateTab(tabIndex) {
+        if (tabIndex < 0 || tabIndex > 3) {
+            return
+        }
+
+        // Drop queued work first: a late pendingSearch would otherwise pull the
+        // view straight back to the results page once the transition finishes.
+        root.pendingSearch = false
+        root.pendingTabIndex = -1
+
+        navBar.currentIndex = tabIndex
+        Plasmoid.configuration.lastTab = tabIndex
+
+        if (root.header && root.header.searchText.length > 0) {
+            root.blockingHoverFocus = false
+            // Clearing the field also empties Kicker.RunnerModel's query, so
+            // the runners stop working on a query nobody is looking at.
+            root.header.searchField.text = ""
+        }
+
+        contentItemStackView.reverseTransitions = false
+        switchToTab(tabIndex)
+
+        // Keyboard focus belongs on the page the user opened, not on the
+        // search field they just left. Falls back to the stack view while the
+        // page is still being built.
+        if (kickoff.contentArea) {
+            kickoff.contentArea.forceActiveFocus(Qt.MouseFocusReason)
+        } else {
+            contentItemStackView.forceActiveFocus(Qt.MouseFocusReason)
+        }
     }
 
     // ── Helper to switch content page ──
