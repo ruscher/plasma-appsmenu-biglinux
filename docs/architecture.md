@@ -8,7 +8,7 @@
 main.qml
 └── FullRepresentation.qml
     ├── Header.qml                 # one row: avatar/identity, search, session actions, Options (⋮)
-    ├── VerticalStackView           # Home, Apps, Places, Info, Search
+    ├── VerticalStackView           # Home, Apps, Places (PlacesPage.qml), Info, Search
     ├── navigation sidebar
     └── components/OnboardingOverlay.qml
 ```
@@ -66,6 +66,43 @@ already-selected tab emits no change signal, and `onCurrentIndexChanged`
 refuses to switch pages while a query is active. The `contentItemStackView.busy`
 deferral must be preserved — it is what prevents the `StackView.replace()`
 use-after-free.
+
+## Places
+
+`PlacesPage.qml` is an activity hub, not a list of folders. Five categories,
+Frequently Used first:
+
+| Category | Data |
+| --- | --- |
+| Frequently Used | `RecentUsageModel(OnlyApps / OnlyFolders / OnlyDocs, ordering: Popular)` |
+| Computer | `Kicker.ComputerModel` (wraps `KFilePlacesModel`) + `components/DeviceSection.qml` |
+| History Apps / Files / Folders | `RecentUsageModel(…, ordering: Recent)` |
+
+Things to know before changing it:
+
+- `ordering: Popular` **is** the activity manager's `HighScoredFirst`, and the
+  query is already scoped to `Activity::current()`. Do not write a ranking
+  formula; Places would then disagree with the rest of Plasma. No relevance
+  value is exposed to QML anyway.
+- Use per-type models, not `AppsAndDocs`: that one carries a single `Limit(30)`
+  across all types and starves whichever type scores lower (5 apps out of 29
+  rows, measured).
+- `ComputerModel` filters out fixed devices and exposes no capacity, mounted
+  state or actions. `DeviceSection` fills that gap using the `hotplug` and
+  `soliddevice` data engines plus the latter's `mount`/`unmount` service — no
+  plugin, no shell, no root, and no timer.
+- The category selection is owned by `PlacesPage.currentCategory`, and the
+  sidebar is a plain `ListView`. It must not be a `Components.AccessibleListView`:
+  that component's inner view re-asserts `currentIndex: count > 0 ? 0 : -1` on
+  unrelated relayouts and will silently drag the selection back to the first
+  category.
+- Do **not** reset the category on `kickoff.expandedChanged`. `expanded` has
+  been observed re-firing `true` while the menu is open. The page is rebuilt on
+  every visit, which is what makes Frequently Used the entry point.
+
+Details and the reasoning behind what was deliberately *not* built (global
+shortcuts, a separate Recent Locations, a C++ helper) are in `docs/places-01`
+through `docs/places-10`.
 
 ## Info dashboard
 
