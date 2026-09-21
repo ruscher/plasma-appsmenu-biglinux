@@ -25,7 +25,9 @@ depends=('plasma-workspace'     # plasmashell + org.kde.plasma.private.{kicker,m
          'kcoreaddons'
          'ksvg'
          'qt6-declarative')
-optdepends=('xdg-utils: open the preferred calendar application from the Calendar gadget'
+optdepends=('kimageformats: AVIF, HEIC/HEIF and JPEG XL pictures in the Gallery gadget'
+            'glib2: gio, used by Quick Links to launch applications from their desktop entry'
+            'xdg-utils: open the preferred calendar application from the Calendar gadget'
             'kio: kioclient, used to launch the calendar application'
             'libcanberra: alarm sound when a Countdown gadget finishes'
             'ocean-sound-theme: default alarm sound used by the Countdown gadget'
