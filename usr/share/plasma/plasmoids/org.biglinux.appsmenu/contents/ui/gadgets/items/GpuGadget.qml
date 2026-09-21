@@ -8,6 +8,7 @@
 
 import QtQuick 2.15
 import QtQuick.Layouts 1.15
+import QtQuick.Controls 2.15 as QQC2
 import org.kde.plasma.components 3.0 as PC3
 import org.kde.kirigami 2.20 as Kirigami
 import org.kde.ksysguard.sensors as Sensors
@@ -44,7 +45,7 @@ Item {
     Timer { id: rediscover; interval: 500; onTriggered: gpu.discover() }
     Timer { interval: 1500; running: true; onTriggered: gpu.discover() }
 
-    Component.onCompleted: host.accent = "#f43f5e"
+    Component.onCompleted: host.accentColor = "#f43f5e"
     Binding { target: gpu.host; property: "subtitle"; value: gpu.gpuIds.length > 1 ? i18np("%1 GPU", "%1 GPUs", gpu.gpuIds.length) : "" }
 
     function gb(v) { return ((Number(v) || 0) / 1024 / 1024 / 1024).toLocaleString(Qt.locale(), "f", 1) }
@@ -53,15 +54,30 @@ Item {
         anchors.fill: parent
         spacing: Kirigami.Units.largeSpacing
 
-        Repeater {
-            // compact: only the first (usually the discrete) GPU
-            model: gpu.host.compact ? gpu.gpuIds.slice(0, 1) : gpu.gpuIds.slice(0, 2)
+        /*  Every card the system reports. A machine with three would have had
+            one silently dropped by `slice(0, 2)`; the list scrolls instead. */
+        ListView {
+            id: cardList
+
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            model: gpu.gpuIds
+            clip: true
+            spacing: Kirigami.Units.largeSpacing
+            boundsBehavior: Flickable.StopAtBounds
+            flickableDirection: Flickable.VerticalFlick
+
+            QQC2.ScrollBar.vertical: PC3.ScrollBar {
+                policy: cardList.contentHeight > cardList.height ? QQC2.ScrollBar.AsNeeded
+                                                                 : QQC2.ScrollBar.AlwaysOff
+            }
+
             delegate: RowLayout {
                 id: card
                 required property string modelData
                 required property int index
-                Layout.fillWidth: true
-                Layout.fillHeight: true
+                width: cardList.width
+                height: Math.max(implicitHeight, cardList.height / Math.max(1, cardList.count))
                 spacing: Kirigami.Units.largeSpacing
 
                 Sensors.Sensor { id: usage; sensorId: card.modelData + "/usage"; enabled: gpu.host.active; updateRateLimit: gpu.rate }

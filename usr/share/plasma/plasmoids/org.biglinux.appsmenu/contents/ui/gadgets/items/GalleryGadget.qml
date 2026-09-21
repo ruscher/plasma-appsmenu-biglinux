@@ -26,28 +26,100 @@ Item {
     property int index: 0
     property bool front: true   // which layer is on top
 
-    Component.onCompleted: { host.accent = "#06b6d4"; host.settingsComponent = settings }
+    Component.onCompleted: { host.accentColor = "#06b6d4"; host.settingsComponent = settings }
     Binding { target: gallery.host; property: "subtitle"; value: files.count > 0 ? (gallery.index + 1) + "/" + files.count : "" }
+
+    onFolderChanged: { brokenData = ({}); brokenCount = 0 }
 
     FolderListModel {
         id: files
         folder: gallery.folder
-        nameFilters: ["*.jpg", "*.jpeg", "*.png", "*.webp", "*.JPG", "*.JPEG", "*.PNG", "*.gif", "*.bmp", "*.avif"]
+        /*  Only formats Qt can really decode here. Checked against
+            QImageReader.supportedImageFormats() on the target system rather
+            than assumed: kimageformats supplies avif, heif/heic and jxl, and
+            Qt itself the rest. A system without kimageformats simply fails to
+            decode those three, which the slide handler below survives.
+
+            `caseSensitive: false` replaces the hand-written "*.JPG" variants,
+            which only covered three of the extensions anyway.  */
+        nameFilters: [
+            "*.png", "*.jpg", "*.jpeg", "*.gif", "*.bmp",
+            "*.webp", "*.tif", "*.tiff",
+            "*.avif", "*.heic", "*.heif", "*.jxl"
+        ]
+        caseSensitive: false
         showDirs: false
         sortField: FolderListModel.Name
     }
-    function urlAt(i) { return files.count > 0 ? files.get(((i % files.count) + files.count) % files.count, "fileUrl") : "" }
-    function show(i) {
-        if (files.count === 0) return
-        index = ((i % files.count) + files.count) % files.count
+    /*  Files that failed to decode — a format this system has no plugin for,
+        or a truncated download. They are remembered so the slideshow stops
+        returning to them, and so a folder full of them cannot spin forever. */
+    property var brokenData
+    readonly property var broken: brokenData !== undefined ? brokenData : ({})
+    property int brokenCount: 0
+
+    function wrap(i) { return files.count > 0 ? ((i % files.count) + files.count) % files.count : 0 }
+    function urlAt(i) { return files.count > 0 ? files.get(wrap(i), "fileUrl") : "" }
+
+    /*  First index from `i` in direction `dir` that has not already failed;
+        -1 when every picture in the folder is unreadable.  */
+    function usableFrom(i, dir) {
+        for (let n = 0; n < files.count; n++) {
+            const c = wrap(i + dir * n)
+            if (!broken[String(urlAt(c))]) {
+                return c
+            }
+        }
+        return -1
+    }
+
+    function show(i, dir) {
+        if (files.count === 0) {
+            return
+        }
+        const step = dir === undefined ? 1 : dir
+        const target = usableFrom(i, step)
+        if (target < 0) {
+            return
+        }
+        index = target
         if (front) { back.source = urlAt(index) } else { frontImg.source = urlAt(index) }
         front = !front
+    }
+
+    /*  A picture the decoder cannot read is skipped, not fatal: the gadget
+        logs which file and moves to the next one. Only the file name reaches
+        the log, never the contents.  */
+    function markBroken(url, dir) {
+        const u = String(url || "")
+        if (!u.length || broken[u]) {
+            return
+        }
+        const b = Object.assign({}, broken)
+        b[u] = true
+        brokenData = b
+        brokenCount++
+        console.warn("GalleryGadget: cannot decode",
+                     u.substring(u.lastIndexOf("/") + 1), "— skipping it")
+        if (brokenCount < files.count) {
+            skipBroken.dir = dir === undefined ? 1 : dir
+            skipBroken.restart()
+        }
+    }
+
+    /*  Deferred by a tick: advancing straight out of onStatusChanged would
+        reassign the source of the very image still reporting its status. */
+    Timer {
+        id: skipBroken
+        property int dir: 1
+        interval: 1
+        onTriggered: gallery.show(gallery.index + dir, dir)
     }
     Timer {
         interval: gallery.intervalMs
         running: gallery.host.active && files.count > 1 && !gallery.host.hovered
         repeat: true
-        onTriggered: gallery.show(gallery.index + 1)
+        onTriggered: gallery.show(gallery.index + 1, 1)
     }
     Connections {
         target: files
@@ -73,7 +145,13 @@ Item {
             scale: shown ? 1.08 : 1.0
             Behavior on opacity { NumberAnimation { duration: 900; easing.type: Easing.InOutQuad } }
             Behavior on scale { enabled: shown; NumberAnimation { duration: gallery.intervalMs + 900; easing.type: Easing.Linear } }
-            onStatusChanged: if (status === Image.Ready) shown = true
+            onStatusChanged: {
+                if (status === Image.Ready) {
+                    shown = true
+                } else if (status === Image.Error) {
+                    gallery.markBroken(source, 1)
+                }
+            }
             onSourceChanged: shown = false
         }
         Slide { id: back; z: gallery.front ? 0 : 1 }
@@ -89,8 +167,8 @@ Item {
             anchors { bottom: parent.bottom; right: parent.right; margins: Kirigami.Units.smallSpacing }
             opacity: gallery.host.hovered && files.count > 1 ? 1 : 0
             Behavior on opacity { NumberAnimation { duration: Kirigami.Units.shortDuration } }
-            PC3.ToolButton { icon.name: "go-previous"; onClicked: gallery.show(gallery.index - 1); Accessible.name: i18n("Previous picture") }
-            PC3.ToolButton { icon.name: "go-next"; onClicked: gallery.show(gallery.index + 1); Accessible.name: i18n("Next picture") }
+            PC3.ToolButton { icon.name: "go-previous"; onClicked: gallery.show(gallery.index - 1, -1); Accessible.name: i18n("Previous picture") }
+            PC3.ToolButton { icon.name: "go-next"; onClicked: gallery.show(gallery.index + 1, 1); Accessible.name: i18n("Next picture") }
         }
     }
 

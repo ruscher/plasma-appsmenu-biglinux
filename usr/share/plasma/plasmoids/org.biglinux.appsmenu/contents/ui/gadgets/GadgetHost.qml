@@ -46,12 +46,30 @@ Item {
     readonly property bool hovered: hoverHandler.hovered
 
     // ── API for the gadget ──
-    property var cfg: ({})
+    /*  `cfgData` deliberately has no initialiser: assigning a property that
+        was never bound does not destroy a binding, so the model round trip
+        below stops logging "Overwriting binding on … cfg" on every save —
+        noise that was drowning real gadget errors in the journal. `cfg` is
+        what gadgets read, and it is never undefined.  */
+    property var cfgData
+    readonly property var cfg: cfgData !== undefined && cfgData !== null ? cfgData : ({})
     property string title: def ? def.name : ""
     property string subtitle: ""
     property bool loading: false
     property bool offline: false
-    property color accent: Kirigami.Theme.highlightColor
+    /*  A gadget states its colour by assigning `accentColor`; everything —
+        the frame here and the gadgets themselves — reads `accent`.
+
+        The split exists because `accent` used to be both, initialised with a
+        binding to the theme. Every gadget that set its own colour destroyed
+        that binding and logged "Overwriting binding on … accent" at each
+        start, 23 times over. `accentColor` carries a plain literal, so
+        assigning it is not overwriting a binding, and `accent` keeps the
+        theme fallback for any gadget that states no colour of its own.  */
+    property color accentColor: "transparent"
+    readonly property color accent: accentColor.a > 0 ? accentColor : Kirigami.Theme.highlightColor
+    /*  Buttons the gadget wants beside its title; see GadgetTitleBar. */
+    property var titleActions: []
     property Component settingsComponent: null
     property string errorText: ""
     readonly property real contentPadding: Kirigami.Units.largeSpacing
@@ -64,11 +82,11 @@ Item {
     function setCfg(key, value) {
         const c = Object.assign({}, cfg)
         c[key] = value
-        cfg = c
+        cfgData = c
         grid.saveCfg(uid, c)
     }
     function saveCfg(obj) {
-        cfg = Object.assign({}, obj)
+        cfgData = Object.assign({}, obj)
         grid.saveCfg(uid, cfg)
     }
     function cacheGet(key) { return grid.cacheGet(uid + ":" + key) }
@@ -76,6 +94,12 @@ Item {
     // Shared (not per-instance) cache — e.g. the same feed in two gadgets
     function sharedCacheGet(key) { return grid.cacheGet(gadgetId + ":" + key) }
     function sharedCacheSet(key, value) { grid.cacheSet(gadgetId + ":" + key, value) }
+    /*  Keys this gadget type has cached, without the "<gadgetId>:" prefix. */
+    function sharedCacheKeys(prefix) {
+        const full = gadgetId + ":" + (prefix || "")
+        return grid.cacheKeys(full).map(k => k.substring(gadgetId.length + 1))
+    }
+    function sharedCacheRemove(key) { grid.cacheRemove(gadgetId + ":" + key) }
     function setError(text) { errorText = text }
     function clearError() { errorText = "" }
     function openSettings() { grid.openSettings(host) }
@@ -126,10 +150,10 @@ Item {
     }
 
     onCfgJsonChanged: {
-        try { cfg = cfgJson && cfgJson.length ? JSON.parse(cfgJson) : {} } catch (e) { cfg = {} }
+        try { cfgData = cfgJson && cfgJson.length ? JSON.parse(cfgJson) : {} } catch (e) { cfgData = {} }
     }
     Component.onCompleted: {
-        try { cfg = cfgJson && cfgJson.length ? JSON.parse(cfgJson) : {} } catch (e) { cfg = {} }
+        try { cfgData = cfgJson && cfgJson.length ? JSON.parse(cfgJson) : {} } catch (e) { cfgData = {} }
         if (def) {
             loader.setSource(Qt.resolvedUrl("items/" + def.source), { "host": host })
         }
@@ -206,6 +230,8 @@ Item {
                 online: host.def ? host.def.online : false
                 offline: host.offline
                 loading: host.loading
+                actions: host.titleActions
+                hostHovered: host.hovered
             }
         }
 

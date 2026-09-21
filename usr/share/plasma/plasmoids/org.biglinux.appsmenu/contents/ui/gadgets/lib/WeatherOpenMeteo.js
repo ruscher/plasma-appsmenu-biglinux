@@ -55,19 +55,57 @@ function geocode(name, cb) {
     })
 }
 
-// Approximate location from the public IP (only the request's IP is sent).
+/*  Approximate location from the public IP.
+
+    HTTPS only, on purpose: the previous fallback used cleartext
+    http://ip-api.com, which puts the user's city on the wire for every device
+    along the path to read. ip-api.com offers no HTTPS on its free tier, so it
+    was replaced rather than upgraded. None of these providers needs an
+    account or an API key, and the request body carries nothing but the IP the
+    connection already reveals.
+
+    They are tried in order with a short timeout, so one dead provider costs a
+    few seconds rather than the full 12 s default.  */
+var IP_PROVIDERS = [
+    { url: "https://ipwho.is/", parse: function(d) {
+        if (!d || d.success !== true || typeof d.latitude !== "number") return null
+        return { lat: d.latitude, lon: d.longitude, name: placeLabel(d.city, d.region, d.country_code) }
+    } },
+    { url: "https://get.geojs.io/v1/ip/geo.json", parse: function(d) {
+        if (!d) return null
+        var lat = parseFloat(d.latitude), lon = parseFloat(d.longitude)
+        if (isNaN(lat) || isNaN(lon)) return null
+        return { lat: lat, lon: lon, name: placeLabel(d.city, d.region, d.country_code) }
+    } },
+    { url: "https://ipapi.co/json/", parse: function(d) {
+        if (!d || typeof d.latitude !== "number") return null
+        return { lat: d.latitude, lon: d.longitude, name: placeLabel(d.city, d.region, d.country_code) }
+    } }
+]
+
+function placeLabel(city, region, cc) {
+    var s = city || ""
+    if (region && region !== city) s += (s ? ", " : "") + region
+    if (cc) s += (s ? " \u00b7 " : "") + cc
+    return s
+}
+
 function locateByIp(cb) {
-    Net.fetchJson("https://ipapi.co/json/", function(err, data) {
-        if (err || !data || typeof data.latitude !== "number") {
-            // fallback provider
-            Net.fetchJson("http://ip-api.com/json/?fields=status,city,regionName,countryCode,lat,lon", function(err2, d2) {
-                if (err2 || !d2 || d2.status !== "success") return cb(err || err2 || "notfound", null)
-                cb(null, { lat: d2.lat, lon: d2.lon, name: d2.city + (d2.regionName ? ", " + d2.regionName : "") + " · " + d2.countryCode })
-            })
-            return
-        }
-        cb(null, { lat: data.latitude, lon: data.longitude, name: data.city + (data.region ? ", " + data.region : "") + " · " + data.country_code })
-    })
+    var i = 0
+    var lastErr = null
+    function attempt() {
+        if (i >= IP_PROVIDERS.length) return cb(lastErr || "notfound", null)
+        var p = IP_PROVIDERS[i++]
+        Net.fetchJson(p.url, function(err, data) {
+            if (!err) {
+                var loc = p.parse(data)
+                if (loc && loc.name) return cb(null, loc)
+            }
+            lastErr = err || "notfound"
+            attempt()
+        }, 6000)
+    }
+    attempt()
 }
 
 function forecast(lat, lon, unit, cb) {
@@ -94,6 +132,7 @@ function forecast(lat, lon, unit, cb) {
                 code: c.weather_code, isDay: c.is_day, icon: iconFor(c.weather_code, c.is_day), text: textFor(c.weather_code),
                 humidity: Math.round(c.relative_humidity_2m), wind: Math.round(c.wind_speed_10m),
                 windUnit: unit === "f" ? "mph" : "km/h", unit: unit === "f" ? "°F" : "°C",
+                unitKey: unit === "f" ? "f" : "c", lat: lat, lon: lon,
                 daily: daily, fetchedAt: Date.now()
             })
         } catch (e) {

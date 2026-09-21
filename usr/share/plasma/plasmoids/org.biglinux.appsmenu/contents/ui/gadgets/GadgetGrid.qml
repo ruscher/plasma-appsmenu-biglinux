@@ -27,8 +27,13 @@ Item {
 
     readonly property real cellWidth: Math.max(80, Math.floor((width - spacing * (columns - 1)) / columns))
     readonly property real cellHeight: Math.round(cellWidth * 0.94)
-    property var positions: ({})
-    property var occupancy: []
+    /*  Same reason as GadgetHost.cfg: no initialiser on the settable half,
+        so recomputing the layout does not overwrite a binding. Readers index
+        these directly, so the exposed halves are never undefined.  */
+    property var positionsData
+    property var occupancyData
+    readonly property var positions: positionsData !== undefined ? positionsData : ({})
+    readonly property var occupancy: occupancyData !== undefined ? occupancyData : []
     property int rowsUsed: 0
     readonly property int count: layoutModel.count
 
@@ -41,6 +46,8 @@ Item {
     // cache functions are injected by the page
     property var cacheGet: function(key) { return undefined }
     property var cacheSet: function(key, value) {}
+    property var cacheKeys: function(prefix) { return [] }
+    property var cacheRemove: function(key) {}
 
     ListModel {
         id: layoutModel
@@ -168,8 +175,8 @@ Item {
                 }
             }
         }
-        occupancy = occ
-        positions = pos
+        occupancyData = occ
+        positionsData = pos
         rowsUsed = maxRow
     }
     onColumnsChanged: relayout()

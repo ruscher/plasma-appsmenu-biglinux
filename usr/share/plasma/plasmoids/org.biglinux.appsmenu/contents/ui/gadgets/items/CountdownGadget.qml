@@ -27,7 +27,7 @@ Item {
     readonly property var next: pending.length ? pending[0] : null
 
     Component.onCompleted: {
-        host.accent = "#a855f7"
+        host.accentColor = "#a855f7"
         host.settingsComponent = settings
     }
     Timer { interval: 1000; running: cd.host.active && cd.next !== null; repeat: true; triggeredOnStart: true; onTriggered: cd.tick() }
@@ -163,12 +163,32 @@ Item {
             }
         }
 
-        // Finished events waiting to be dismissed
-        Repeater {
-            model: cd.events.filter(e => e.fired).slice(0, cd.host.compact ? 1 : 3)
+        /*  Finished events waiting to be dismissed. Every one of them: these
+            rows are how an event is dismissed, so hiding any leaves it stuck
+            for good. The list is bounded and scrolls rather than pushing the
+            countdown itself off the card.  */
+        ListView {
+            id: firedList
+            readonly property var fired: cd.events.filter(e => e.fired)
+
+            Layout.fillWidth: true
+            Layout.preferredHeight: Math.min(contentHeight,
+                                             Kirigami.Units.gridUnit * (cd.host.compact ? 2.2 : 4))
+            visible: fired.length > 0
+            model: fired
+            clip: true
+            spacing: 0
+            boundsBehavior: Flickable.StopAtBounds
+            flickableDirection: Flickable.VerticalFlick
+
+            QQC2.ScrollBar.vertical: PC3.ScrollBar {
+                policy: firedList.contentHeight > firedList.height ? QQC2.ScrollBar.AsNeeded
+                                                                   : QQC2.ScrollBar.AlwaysOff
+            }
+
             delegate: RowLayout {
                 required property var modelData
-                Layout.fillWidth: true
+                width: firedList.width
                 spacing: Kirigami.Units.smallSpacing
                 Kirigami.Icon { source: "dialog-ok"; color: cd.host.accent; Layout.preferredWidth: Kirigami.Units.iconSizes.small; Layout.preferredHeight: Kirigami.Units.iconSizes.small }
                 PC3.Label { text: i18n("%1 — done", modelData.name); font.pointSize: Kirigami.Theme.smallFont.pointSize; elide: Text.ElideRight; Layout.fillWidth: true }
@@ -282,18 +302,111 @@ Item {
 
             PC3.Label { text: i18n("New event"); font.weight: Font.DemiBold }
             QQC2.TextField { id: newName; Layout.fillWidth: true; placeholderText: i18n("Event name") }
-            DateTimeRow {
-                id: newWhen
-                readonly property date d0: new Date(Date.now() + 3600000)
-                day: d0.getDate(); month: d0.getMonth() + 1; year: d0.getFullYear(); hour: d0.getHours(); minute: 0
+
+            /*  "Add event" sits on the same line as the date fields when
+                there is room for it, and drops to its own line when there is
+                not — which is what a Flow does and a RowLayout does not.  */
+            Flow {
+                Layout.fillWidth: true
+                spacing: Kirigami.Units.smallSpacing
+
+                DateTimeRow {
+                    id: newWhen
+                    readonly property date d0: new Date(Date.now() + 3600000)
+                    day: d0.getDate(); month: d0.getMonth() + 1; year: d0.getFullYear(); hour: d0.getHours(); minute: 0
+                }
+                PC3.Button {
+                    id: addButton
+                    icon.name: "list-add"; text: i18n("Add event")
+                    enabled: newName.text.trim().length > 0
+                    onClicked: se.addEvent()
+                }
             }
-            PC3.Button {
-                icon.name: "list-add"; text: i18n("Add event")
-                enabled: newName.text.trim().length > 0
-                onClicked: {
-                    const l = se.list.map(e => Object.assign({}, e))
-                    l.push({ name: newName.text.trim(), when: se.whenOf(newWhen.day, newWhen.month, newWhen.year, newWhen.hour, newWhen.minute), created: Date.now() })
-                    se.save(l); newName.text = ""
+
+            /*  Closing the settings with a half-typed event used to throw it
+                away without a word. The dialog asks this page first (see
+                GadgetSettingsDialog.tryClose), and the page only objects when
+                there is really something to lose: an event is only addable
+                once it has a name, so an untouched form asks nothing, and so
+                does a form that was just added, because adding clears it.  */
+            readonly property bool dirty: newName.text.trim().length > 0
+            property var pendingProceed: null
+
+            function addEvent() {
+                const l = se.list.map(e => Object.assign({}, e))
+                l.push({
+                    name: newName.text.trim(),
+                    when: se.whenOf(newWhen.day, newWhen.month, newWhen.year, newWhen.hour, newWhen.minute),
+                    created: Date.now()
+                })
+                se.save(l)
+                newName.text = ""
+            }
+
+            function requestClose(proceed) {
+                if (!se.dirty) {
+                    proceed()
+                    return
+                }
+                se.pendingProceed = proceed
+                unsaved.open()
+            }
+
+            QQC2.Popup {
+                id: unsaved
+                parent: QQC2.Overlay.overlay
+                anchors.centerIn: parent
+                modal: true
+                dim: true
+                closePolicy: QQC2.Popup.NoAutoClose
+                padding: Kirigami.Units.largeSpacing
+
+                background: Kirigami.ShadowedRectangle {
+                    color: Kirigami.Theme.backgroundColor
+                    Kirigami.Theme.colorSet: Kirigami.Theme.Window
+                    Kirigami.Theme.inherit: false
+                    radius: Kirigami.Units.largeSpacing
+                    shadow.size: 24
+                    shadow.color: Qt.rgba(0, 0, 0, 0.5)
+                }
+
+                contentItem: ColumnLayout {
+                    spacing: Kirigami.Units.largeSpacing
+
+                    PC3.Label {
+                        text: i18n("You have an event that hasn't been added yet.")
+                        wrapMode: Text.Wrap
+                        Layout.maximumWidth: Kirigami.Units.gridUnit * 18
+                    }
+                    Flow {
+                        Layout.fillWidth: true
+                        spacing: Kirigami.Units.smallSpacing
+                        layoutDirection: Qt.RightToLeft
+
+                        PC3.Button {
+                            text: i18nc("@action:button add the pending event and close", "Add event")
+                            icon.name: "list-add"
+                            onClicked: {
+                                se.addEvent()
+                                unsaved.close()
+                                if (se.pendingProceed) { se.pendingProceed(); se.pendingProceed = null }
+                            }
+                        }
+                        PC3.Button {
+                            text: i18nc("@action:button throw the pending event away and close", "Discard")
+                            icon.name: "edit-delete"
+                            onClicked: {
+                                newName.text = ""
+                                unsaved.close()
+                                if (se.pendingProceed) { se.pendingProceed(); se.pendingProceed = null }
+                            }
+                        }
+                        PC3.Button {
+                            text: i18nc("@action:button keep editing", "Cancel")
+                            icon.name: "dialog-cancel"
+                            onClicked: { unsaved.close(); se.pendingProceed = null }
+                        }
+                    }
                 }
             }
             PC3.Label {

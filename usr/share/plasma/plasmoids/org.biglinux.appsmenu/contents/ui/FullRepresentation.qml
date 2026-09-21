@@ -213,7 +213,12 @@ EmptyPage {
                 anchors.bottomMargin: Kirigami.Units.smallSpacing
                 spacing: Kirigami.Units.smallSpacing
 
-                property int currentIndex: root.initialTab
+                /*  A plain value, not a binding on root.initialTab: the tab
+                    is assigned imperatively (activateTab, and again whenever
+                    the menu opens), and the first of those assignments would
+                    destroy the binding and log a warning. */
+                property int currentIndex: 0
+                Component.onCompleted: currentIndex = root.initialTab
 
                 Accessible.role: Accessible.PageTabList
                 Accessible.name: i18n("Main navigation tabs")

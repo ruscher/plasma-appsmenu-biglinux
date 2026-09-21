@@ -40,7 +40,7 @@ Item {
     Sensors.Sensor { id: gpu1Power; sensorId: "gpu/gpu1/power"; enabled: bat.host.active && !bat.hasBattery; updateRateLimit: 2000 }
     readonly property real gpuWatts: (Number(gpu0Power.value) || 0) + (Number(gpu1Power.value) || 0)
 
-    Component.onCompleted: host.accent = "#84cc16"
+    Component.onCompleted: host.accentColor = "#84cc16"
     Binding { target: bat.host; property: "subtitle"; value: bat.hasBattery ? (bat.charging ? i18n("Charging") : (bat.full ? i18n("Full") : i18n("On battery"))) : i18n("Mains power") }
 
     function remaining() {
@@ -207,7 +207,7 @@ Item {
                 font.pointSize: Kirigami.Theme.defaultFont.pointSize * 2.2
                 font.weight: Font.Light
             }
-            PC3.Label { text: "W"; font.pointSize: Kirigami.Theme.defaultFont.pointSize * 1.1; opacity: 0.7; Layout.alignment: Qt.AlignBottom; Layout.bottomMargin: 6 }
+            PC3.Label { text: i18nc("@label watt, the unit of power", "W"); font.pointSize: Kirigami.Theme.defaultFont.pointSize * 1.1; opacity: 0.7; Layout.alignment: Qt.AlignBottom; Layout.bottomMargin: 6 }
             Item { Layout.fillWidth: true }
         }
         PC3.Label {

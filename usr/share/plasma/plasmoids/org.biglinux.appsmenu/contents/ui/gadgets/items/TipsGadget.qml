@@ -48,7 +48,7 @@ Item {
     ]
     property int index: Math.floor(Math.random() * list.length)
 
-    Component.onCompleted: host.accent = "#8b5cf6"
+    Component.onCompleted: host.accentColor = "#8b5cf6"
     Binding { target: tips.host; property: "subtitle"; value: i18n("%1 / %2", tips.index + 1, tips.list.length) }
 
     Timer {

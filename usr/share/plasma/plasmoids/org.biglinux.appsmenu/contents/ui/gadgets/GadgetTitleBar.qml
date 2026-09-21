@@ -3,12 +3,18 @@
     SPDX-License-Identifier: GPL-2.0-or-later
 
     GadgetTitleBar — the slim header every gadget card shares: icon, title,
-    optional subtitle/status at the right. Owned by GadgetHost (it is also the
-    drag handle in normal mode), so gadgets stay focused on content.
+    optional actions, subtitle/status at the right. Owned by GadgetHost (it is
+    also the drag handle in normal mode), so gadgets stay focused on content.
+
+    `actions` is a plain list of QtQuick Controls Actions a gadget publishes
+    through `host.titleActions`. Keeping it generic means a gadget that wants a
+    button next to its title — Calendar's "Today", say — does not have to be
+    special-cased in here.
 */
 
 import QtQuick 2.15
 import QtQuick.Layouts 1.15
+import QtQuick.Controls 2.15 as QQC2
 import org.kde.plasma.components 3.0 as PC3
 import org.kde.kirigami 2.20 as Kirigami
 
@@ -20,12 +26,19 @@ RowLayout {
     property bool online: false
     property bool offline: false   // online gadget currently without network
     property bool loading: false
+    /*  Actions (QQC2.Action) the gadget publishes for its own title bar. */
+    property var actions: []
+    /*  The card reports hover so the buttons can stay discreet until needed. */
+    property bool hostHovered: false
 
     spacing: Kirigami.Units.smallSpacing
     implicitHeight: Kirigami.Units.iconSizes.small + Kirigami.Units.smallSpacing
 
     Kirigami.Icon {
         source: bar.icon
+        /*  The installed theme inherits only hicolor, so a name it does not
+            carry would leave an empty gap rather than fall through to Breeze. */
+        fallback: "dialog-information"
         Layout.preferredWidth: Kirigami.Units.iconSizes.small
         Layout.preferredHeight: Kirigami.Units.iconSizes.small
         opacity: 0.85
@@ -41,6 +54,26 @@ RowLayout {
         Accessible.role: Accessible.Heading
         Accessible.name: bar.title
     }
+    Repeater {
+        model: bar.actions
+        delegate: PC3.ToolButton {
+            required property var modelData
+
+            action: modelData
+            display: QQC2.AbstractButton.IconOnly
+            icon.width: Kirigami.Units.iconSizes.small
+            icon.height: Kirigami.Units.iconSizes.small
+            implicitWidth: Kirigami.Units.iconSizes.smallMedium + 4
+            implicitHeight: implicitWidth
+            opacity: bar.hostHovered ? 0.9 : 0.45
+
+            Accessible.name: modelData.text
+            PC3.ToolTip.text: modelData.text
+            PC3.ToolTip.visible: hovered
+            PC3.ToolTip.delay: Kirigami.Units.toolTipDelay
+        }
+    }
+
     PC3.BusyIndicator {
         visible: bar.loading
         running: visible

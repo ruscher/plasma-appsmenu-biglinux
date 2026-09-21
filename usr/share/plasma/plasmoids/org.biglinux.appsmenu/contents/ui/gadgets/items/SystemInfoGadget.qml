@@ -37,7 +37,7 @@ Item {
     Sensors.Sensor { id: gpuName;  sensorId: "gpu/gpu0/name"; enabled: true; updateRateLimit: 60000 }
     Sensors.Sensor { id: ramTotal; sensorId: "memory/physical/total"; enabled: true; updateRateLimit: 60000 }
 
-    Component.onCompleted: host.accent = "#64748b"
+    Component.onCompleted: host.accentColor = "#64748b"
     Binding { target: si.host; property: "subtitle"; value: String(hostname.value || "") }
 
     function up(sec) {

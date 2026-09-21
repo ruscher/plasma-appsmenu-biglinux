@@ -6,6 +6,9 @@
     Tiles are kept as individual items so they slide and merge instead of
     blinking into place. No timers; nothing runs while the menu is closed.
 
+    Loaded by GamesGadget. It keeps its original `cfg.best` key so a high
+    score saved before the games were gathered under one gadget survives.
+
     cfg: { best }
 */
 
@@ -27,7 +30,7 @@ Item {
     // one level of undo, captured before each move
     property var undoState: null
 
-    Component.onCompleted: { host.accent = "#eab308"; reset() }
+    Component.onCompleted: { host.accentColor = "#eab308"; reset() }
     Binding { target: game.host; property: "subtitle"; value: i18n("Best %1", game.best) }
 
     // ── model: one entry per tile, positioned by row/col ──

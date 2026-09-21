@@ -50,13 +50,40 @@ EmptyPage {
         if (!items || items.length === 0) {
             items = Gadgets.GadgetRegistry.defaultLayout.map(d => ({ id: d.id, size: d.size }))
         }
+        items = migrate(items)
         grid.load(items)
         try {
             const rawCache = Plasmoid.configuration.gadgetCache
             cache = rawCache && rawCache.length > 2 ? JSON.parse(rawCache) : {}
         } catch (e) { cache = {} }
+        /*  grid.load() is what assigns the uids, so ask it what is on the
+            board rather than trusting the serialised items.  */
+        pruneCache(grid.serialize())
         loaded = true
     }
+    /*  Renames a gadget has been through, applied on load so an existing
+        board keeps its place and its settings instead of silently losing the
+        gadget. "puzzle" was the 2048-only card; it is now one game inside
+        "games", which reads the same `best` key.  */
+    function migrate(items) {
+        let changed = false
+        const out = items.map(it => {
+            if (it.id !== "puzzle") {
+                return it
+            }
+            changed = true
+            const cfg = Object.assign({}, it.cfg || {}, { game: "2048" })
+            /*  1x1 no longer exists for this gadget: it now carries a game
+                selector above the board. */
+            const size = (it.size === "1x1" || !it.size) ? "1x2" : it.size
+            return Object.assign({}, it, { id: "games", size: size, cfg: cfg })
+        })
+        if (changed) {
+            Qt.callLater(root.saveLayoutNow)
+        }
+        return out
+    }
+
     function saveLayoutNow() {
         if (!loaded) return
         Plasmoid.configuration.gadgetLayout = JSON.stringify({ v: 1, items: grid.serialize() })
@@ -76,6 +103,65 @@ EmptyPage {
         onTriggered: {
             try { Plasmoid.configuration.gadgetCache = JSON.stringify(root.cache) } catch (e) {}
         }
+    }
+    /*  The cache is persisted into the plasmoid config and nothing ever
+        removed a stale entry, so every gadget the user dropped, re-added or
+        reset left its payload behind for good — a real config grew to seven
+        orphaned weather and seven orphaned currency entries, each holding a
+        full forecast or rate table.
+
+        Entries are addressed either by the instance uid (host.cacheSet) or by
+        the gadget id (host.sharedCacheSet), so a key is worth keeping only
+        while one of those is still on the board.  */
+    function pruneCache(items) {
+        if (!root.cache) {
+            return
+        }
+        const live = {}
+        for (const it of items) {
+            if (it.uid) live[it.uid] = true
+            if (it.id) live[it.id] = true
+        }
+        const kept = {}
+        let dropped = 0
+        for (const key in root.cache) {
+            const prefix = key.substring(0, key.indexOf(":"))
+            if (prefix.length > 0 && live[prefix]) {
+                kept[key] = root.cache[key]
+            } else {
+                dropped++
+            }
+        }
+        if (dropped > 0) {
+            root.cache = kept
+            cacheSaveTimer.restart()
+        }
+    }
+
+    /*  Listing and removal exist so a gadget can drop entries it no longer
+        has any use for — the news gadget forgetting a source the user
+        removed, say. Without them a dropped feed's articles would sit in the
+        plasmoid config for good.  */
+    function cacheKeys(prefix) {
+        const out = []
+        if (!root.cache) {
+            return out
+        }
+        for (const k in root.cache) {
+            if (k.indexOf(prefix) === 0) {
+                out.push(k)
+            }
+        }
+        return out
+    }
+    function cacheRemove(key) {
+        if (!root.cache || root.cache[key] === undefined) {
+            return
+        }
+        const c = Object.assign({}, root.cache)
+        delete c[key]
+        root.cache = c
+        cacheSaveTimer.restart()
     }
     function cacheGet(key) { return root.cache ? root.cache[key] : undefined }
     function cacheSet(key, value) {
@@ -200,6 +286,8 @@ EmptyPage {
                     viewportBottom: flick.contentY + flick.height - y
                     cacheGet: root.cacheGet
                     cacheSet: root.cacheSet
+                    cacheKeys: root.cacheKeys
+                    cacheRemove: root.cacheRemove
                     onLayoutChanged: saveTimer.restart()
                     onSettingsRequested: host => settingsDialog.openFor(host)
                 }

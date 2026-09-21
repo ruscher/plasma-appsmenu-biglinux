@@ -27,10 +27,29 @@ QQC2.Popup {
         }
     }
 
+    /*  A settings page may have something the user would lose by closing —
+        the countdown editor holds an event that was typed but never added.
+        Such a page defines `function requestClose(proceed)`: it either calls
+        proceed() straight away, or puts its own question on screen and calls
+        proceed() once the user has answered. Pages that define nothing close
+        as they always did.
+
+        Every route out of the dialog goes through tryClose(), which is why
+        the automatic close policies are off: Escape and clicking outside are
+        handled below so they cannot bypass the question.  */
+    function tryClose() {
+        if (settingsItem && typeof settingsItem.requestClose === "function") {
+            settingsItem.requestClose(function() { dialog.close() })
+            return
+        }
+        close()
+    }
+
     modal: true
     dim: true
     focus: true
-    closePolicy: QQC2.Popup.CloseOnEscape | QQC2.Popup.CloseOnPressOutside
+    closePolicy: QQC2.Popup.NoAutoClose
+    Keys.onEscapePressed: event => { event.accepted = true; dialog.tryClose() }
     anchors.centerIn: parent
     width: Math.min(parent ? parent.width - Kirigami.Units.gridUnit * 3 : 500, Kirigami.Units.gridUnit * 30)
     height: Math.min(parent ? parent.height - Kirigami.Units.gridUnit * 2 : 400, contentItem.implicitHeight + topPadding + bottomPadding)
@@ -54,7 +73,10 @@ QQC2.Popup {
         shadow.size: 32
         shadow.color: Qt.rgba(0, 0, 0, 0.5)
     }
-    QQC2.Overlay.modal: Rectangle { color: Qt.rgba(0, 0, 0, 0.45) }
+    QQC2.Overlay.modal: Rectangle {
+        color: Qt.rgba(0, 0, 0, 0.45)
+        TapHandler { onTapped: dialog.tryClose() }
+    }
 
     contentItem: ColumnLayout {
         spacing: Kirigami.Units.largeSpacing
@@ -74,7 +96,7 @@ QQC2.Popup {
             }
             PC3.ToolButton {
                 icon.name: "window-close"
-                onClicked: dialog.close()
+                onClicked: dialog.tryClose()
                 Accessible.name: i18n("Close")
             }
         }
@@ -100,7 +122,7 @@ QQC2.Popup {
             PC3.Button {
                 text: i18n("Done")
                 icon.name: "dialog-ok-apply"
-                onClicked: dialog.close()
+                onClicked: dialog.tryClose()
             }
         }
     }
