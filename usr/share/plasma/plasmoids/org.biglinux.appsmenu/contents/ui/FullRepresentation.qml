@@ -135,64 +135,8 @@ EmptyPage {
 
             Component {
                 id: placesPageComponent
-                EmptyPage {
+                PlacesPage {
                     id: placesPage
-                    objectName: "placesPage"
-                    T.StackView.onActivated: {
-                        kickoff.sideBar = categorySidebar
-                        kickoff.contentArea = contentListView
-                    }
-                    Accessible.role: Accessible.Pane
-                    Accessible.name: i18n("Places")
-
-                    contentItem: RowLayout {
-                        spacing: 0
-                        Components.AccessibleListView {
-                            id: categorySidebar
-                            Layout.preferredWidth: root.preferredSideBarWidth + kickoff.backgroundMetrics.leftPadding
-                            Layout.fillHeight: true
-                            model: ListModel {
-                                id: placesCategoryModel
-                                ListElement { display: "Computer"; decoration: "computer" }
-                                ListElement { display: "History"; decoration: "view-history" }
-                                ListElement { display: "Frequently Used"; decoration: "clock" }
-                                Component.onCompleted: {
-                                    placesCategoryModel.setProperty(0, "display", i18nc("category in Places sidebar", "Computer"))
-                                    placesCategoryModel.setProperty(1, "display", i18nc("category in Places sidebar", "History"))
-                                    placesCategoryModel.setProperty(2, "display", i18nc("category in Places sidebar", "Frequently Used"))
-                                    if (Singletons.MenuSingleton.powerManagement.data["PowerDevil"]
-                                        && Singletons.MenuSingleton.powerManagement.data["PowerDevil"]["Is Lid Present"]) {
-                                        placesCategoryModel.setProperty(0, "decoration", "computer-laptop")
-                                    }
-                                }
-                            }
-                            delegate: Delegates.AppDelegate {
-                                width: categorySidebar.view.availableWidth
-                                text: model.display ?? ""
-                                decoration: model.decoration ?? ""
-                                isCategoryListItem: true
-                                displayMode: "list"
-                                hoverEnabled: true
-                            }
-                            view.section.property: ""
-                            Keys.onRightPressed: event => contentListView.forceActiveFocus(Qt.TabFocusReason)
-                        }
-                        Components.AccessibleListView {
-                            id: contentListView
-                            Layout.fillWidth: true
-                            Layout.fillHeight: true
-                            mainContentView: true
-                            model: {
-                                switch (categorySidebar.currentIndex) {
-                                    case 0: return kickoff.computerModel
-                                    case 1: return kickoff.recentUsageModel
-                                    case 2: return kickoff.frequentUsageModel
-                                    default: return null
-                                }
-                            }
-                            Keys.onLeftPressed: event => categorySidebar.forceActiveFocus(Qt.BacktabFocusReason)
-                        }
-                    }
                 }
             }
 
