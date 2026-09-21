@@ -92,6 +92,11 @@ function parseItem(node, isAtom) {
 }
 
 function parse(doc, maxItems) {
+    // A document is null whenever the body was not XML at all — an empty
+    // response, an HTML error page, a captive portal. That is an ordinary
+    // outcome for a feed URL, not something to warn about, so it returns the
+    // empty result directly instead of tripping the catch below.
+    if (!doc || !doc.documentElement) return { title: "", items: [] }
     var result = { title: "", items: [] }
     try {
         var root = doc.documentElement

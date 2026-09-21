@@ -114,6 +114,31 @@ EmptyPage {
         }
     }
 
+    /*  Listing and removal exist so a gadget can drop entries it no longer
+        has any use for — the news gadget forgetting a source the user
+        removed, say. Without them a dropped feed's articles would sit in the
+        plasmoid config for good.  */
+    function cacheKeys(prefix) {
+        const out = []
+        if (!root.cache) {
+            return out
+        }
+        for (const k in root.cache) {
+            if (k.indexOf(prefix) === 0) {
+                out.push(k)
+            }
+        }
+        return out
+    }
+    function cacheRemove(key) {
+        if (!root.cache || root.cache[key] === undefined) {
+            return
+        }
+        const c = Object.assign({}, root.cache)
+        delete c[key]
+        root.cache = c
+        cacheSaveTimer.restart()
+    }
     function cacheGet(key) { return root.cache ? root.cache[key] : undefined }
     function cacheSet(key, value) {
         const c = Object.assign({}, root.cache)
@@ -237,6 +262,8 @@ EmptyPage {
                     viewportBottom: flick.contentY + flick.height - y
                     cacheGet: root.cacheGet
                     cacheSet: root.cacheSet
+                    cacheKeys: root.cacheKeys
+                    cacheRemove: root.cacheRemove
                     onLayoutChanged: saveTimer.restart()
                     onSettingsRequested: host => settingsDialog.openFor(host)
                 }

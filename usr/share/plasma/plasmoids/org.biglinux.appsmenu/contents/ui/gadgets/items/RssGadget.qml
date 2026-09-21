@@ -21,13 +21,12 @@ Item {
 
     readonly property int refreshMs: 30 * 60 * 1000
     readonly property var defaultFeeds: [
-        { name: "Diolinux", url: "https://diolinux.com.br/feed" },
         { name: "Phoronix", url: "https://www.phoronix.com/rss.php" },
-        { name: "OMG! Ubuntu", url: "https://www.omgubuntu.co.uk/feed" },
-        { name: "SempreUpdate", url: "https://sempreupdate.com.br/feed/" },
         { name: "DistroWatch", url: "https://distrowatch.com/news/dw.xml" },
+        { name: "Linux Kernel", url: "https://www.kernel.org/feeds/kdist.xml" },
     ]
     readonly property var feeds: host.cfg.feeds && host.cfg.feeds.length ? host.cfg.feeds : defaultFeeds
+    onFeedsChanged: forgetRemovedFeeds()
     readonly property int current: Math.max(0, Math.min(feeds.length - 1, host.cfg.current || 0))
     readonly property var feed: feeds[current] || defaultFeeds[0]
     readonly property int maxItems: host.cfg.maxItems || 10
@@ -38,6 +37,7 @@ Item {
     Component.onCompleted: {
         host.accentColor = "#f97316"
         host.settingsComponent = settings
+        forgetRemovedFeeds()
         loadFromCacheOrFetch()
     }
     Connections {
@@ -48,6 +48,22 @@ Item {
     Timer { interval: rss.refreshMs; running: rss.host.active; repeat: true; onTriggered: rss.refreshIfStale() }
 
     function cacheKey() { return "feed:" + feed.url }
+
+    /*  Articles are cached per source URL into the plasmoid config. A source
+        the user removed — or one dropped from the defaults — would otherwise
+        keep its articles there for good, so the stale entries are swept on
+        load and whenever the list changes.  */
+    function forgetRemovedFeeds() {
+        const live = {}
+        for (const f of feeds) {
+            live["feed:" + f.url] = true
+        }
+        for (const key of host.sharedCacheKeys("feed:")) {
+            if (!live[key]) {
+                host.sharedCacheRemove(key)
+            }
+        }
+    }
     function loadFromCacheOrFetch() {
         const cached = host.sharedCacheGet(cacheKey())
         items = cached && cached.v && cached.v.items ? cached.v.items : []
@@ -105,24 +121,14 @@ Item {
         spacing: Kirigami.Units.smallSpacing
 
         // Feed switcher (when more than one)
-        RowLayout {
+        /*  Every source stays reachable. This used to be
+            `rss.feeds.slice(0, wide ? 5 : 3)`, which simply hid the rest.  */
+        G.GadgetTabStrip {
             Layout.fillWidth: true
             visible: rss.feeds.length > 1
-            spacing: 2
-            Repeater {
-                model: rss.feeds.slice(0, rss.host.wide ? 5 : 3)
-                delegate: PC3.ToolButton {
-                    required property var modelData
-                    required property int index
-                    text: modelData.name
-                    checkable: true
-                    checked: index === rss.current
-                    font.pointSize: Kirigami.Theme.smallFont.pointSize
-                    implicitHeight: Kirigami.Units.iconSizes.smallMedium
-                    onClicked: rss.host.setCfg("current", index)
-                }
-            }
-            Item { Layout.fillWidth: true }
+            model: rss.feeds
+            currentIndex: rss.current
+            onActivated: index => rss.host.setCfg("current", index)
         }
 
         // Wide layout: horizontal cards with pictures

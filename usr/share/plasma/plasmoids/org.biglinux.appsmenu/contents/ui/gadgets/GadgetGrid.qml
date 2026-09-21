@@ -46,6 +46,8 @@ Item {
     // cache functions are injected by the page
     property var cacheGet: function(key) { return undefined }
     property var cacheSet: function(key, value) {}
+    property var cacheKeys: function(prefix) { return [] }
+    property var cacheRemove: function(key) {}
 
     ListModel {
         id: layoutModel

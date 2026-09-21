@@ -81,3 +81,83 @@ process was cleaned up afterwards.
 **NOT TESTED:** the tiles were not clicked with a pointer (Wayland blocks
 synthetic input); the launch path was exercised through the same helper the
 click handler calls.
+
+---
+
+# 5. News Feed / RSS — sources you can actually reach
+
+## Default sources
+
+Diolinux, OMG! Ubuntu and SempreUpdate were removed as asked. Phoronix and
+DistroWatch remain, and kernel.org was added so the gadget still has enough
+sources for the switcher to mean anything — remove it from the settings if it
+is not wanted. All three were verified to answer and parse before shipping:
+
+| source | HTTP | format | items |
+|---|---|---|---|
+| Phoronix | 200 | RSS 2.0 | 32 |
+| DistroWatch | 200 | RDF | 11 |
+| kernel.org | 200 | RSS 2.0 | 10 |
+
+**No dead references.** Articles are cached per source URL into the plasmoid
+config, so the three removed feeds would have kept their articles there
+forever. `RssGadget.forgetRemovedFeeds()` now sweeps entries for sources no
+longer configured, on load and whenever the list changes. This needed two small
+additions to the shared cache API (`cacheKeys`, `cacheRemove`), which are
+useful to any gadget.
+
+## The source switcher
+
+It was `model: rss.feeds.slice(0, rss.host.wide ? 5 : 3)` — the sources past
+the cut were not merely off-screen, they did not exist as far as the UI was
+concerned, and nothing could reach them.
+
+New shared component `gadgets/GadgetTabStrip.qml`: chips keep their natural
+width (squeezing would trade a hidden item for an unreadable one) and the strip
+scrolls sideways by flick or drag, by wheel — vertical **or** horizontal, since
+a mouse only has one axis and the user still means "move along the strip" — and
+with a thin scrollbar shown only while it is needed. When everything fits, the
+wheel handler is disabled so the page behind keeps scrolling normally. Article
+content stays vertical, as required.
+
+### Test (live, 8 configured sources)
+
+```
+feedCount 8   stripModelCount 8   stripOverflowing true   itemsLoaded 10
+cacheKeysNow ["feed:…distrowatch…", "feed:…phoronix…"]
+```
+
+All eight reachable (none sliced away), overflow detected, and the three
+seeded stale caches for the removed feeds were swept — **PASS**.
+
+## Parser matrix
+
+`lib/RssParser.js` was run against real and synthetic feeds:
+
+| case | result |
+|---|---|
+| RSS 2.0 (Phoronix) | 10 items, dates, links, summaries |
+| RSS 2.0 (kernel.org) | 10 items |
+| RDF (DistroWatch) | 10 items |
+| Atom (GitHub releases) | 10 items, 10 images |
+| special characters | `Açúcar & Café`, CDATA, `&#233;`, `&lt;b&gt;`, `€¥£`, `&amp;` in a URL — all decoded |
+| image in description HTML | extracted |
+| no image | empty string, and the card falls back to a `news-subscribe` icon |
+| very long title (600 chars) | parsed; the delegate wraps and elides at 3 lines |
+| truncated / unclosed tags | partial items, no throw |
+| empty body, plain text, HTML page | 0 items, no throw |
+| maxItems | respected (5 of 50) |
+
+One defect fixed: `parse()` logged a `TypeError` whenever the body was not XML
+at all — an empty response, an HTML error page, a captive portal. That is an
+ordinary outcome for a feed URL, so it now returns the empty result directly
+instead of tripping its own catch.
+
+Worth knowing: **none of the three default sources publishes images** (no
+`media:content`, `media:thumbnail`, `enclosure` or `<img>` anywhere in their
+feeds), so the picture cards show the fallback icon by design rather than by
+failure.
+
+**NOT TESTED:** wheel, trackpad and drag on the strip were not exercised by
+real input — Wayland blocks synthetic input. Overflow detection and the full
+model were verified from the running engine.

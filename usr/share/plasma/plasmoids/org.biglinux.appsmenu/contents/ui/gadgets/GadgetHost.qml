@@ -94,6 +94,12 @@ Item {
     // Shared (not per-instance) cache — e.g. the same feed in two gadgets
     function sharedCacheGet(key) { return grid.cacheGet(gadgetId + ":" + key) }
     function sharedCacheSet(key, value) { grid.cacheSet(gadgetId + ":" + key, value) }
+    /*  Keys this gadget type has cached, without the "<gadgetId>:" prefix. */
+    function sharedCacheKeys(prefix) {
+        const full = gadgetId + ":" + (prefix || "")
+        return grid.cacheKeys(full).map(k => k.substring(gadgetId.length + 1))
+    }
+    function sharedCacheRemove(key) { grid.cacheRemove(gadgetId + ":" + key) }
     function setError(text) { errorText = text }
     function clearError() { errorText = "" }
     function openSettings() { grid.openSettings(host) }
