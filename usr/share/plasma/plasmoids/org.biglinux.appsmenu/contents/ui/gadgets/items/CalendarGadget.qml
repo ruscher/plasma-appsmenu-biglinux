@@ -36,6 +36,27 @@ Item {
     Component.onCompleted: {
         host.accentColor = "#ef4444"
         host.settingsComponent = settings
+        host.titleActions = [todayAction]
+    }
+
+    /*  Returning to the current month used to be hidden behind a click on the
+        month label, which nobody discovers. It is now a real button in the
+        title bar, published through the generic `titleActions` slot so the
+        shared component needs no knowledge of the calendar.  */
+    QQC2.Action {
+        id: todayAction
+        text: i18nc("@action:button jump the calendar back to the current day", "Today")
+        icon.name: "go-jump-today"
+        onTriggered: cal.goToToday()
+    }
+
+    /*  `today` is re-read first: the gadget may have been open across
+        midnight, and resetToToday() would otherwise return to yesterday's
+        month. Everything highlighting the current day is bound to `today`, so
+        the selection follows without further work.  */
+    function goToToday() {
+        cal.today = new Date()
+        backend.resetToToday()
     }
     Connections {
         target: cal.host

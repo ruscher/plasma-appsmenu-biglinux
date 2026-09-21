@@ -1,0 +1,109 @@
+#!/usr/bin/env bash
+#
+# desktop-entry — resolve and launch installed applications by desktop id.
+#
+# SPDX-FileCopyrightText: 2026 BigLinux Team
+# SPDX-License-Identifier: GPL-2.0-or-later
+#
+# The Quick Links gadget used to carry its own copies of every application's
+# icon name and command. They drifted: it asked for the icon "bigstore" while
+# Big Store actually installs "big-store", so the button rendered an empty
+# gap. Copies of Exec are worse, because they lose the desktop entry's field
+# codes, working directory, terminal flag and D-Bus activation.
+#
+# So the gadget now states only a desktop id and asks this helper for the rest.
+#
+# Usage:
+#   desktop-entry resolve <id>...   one TSV line per id:
+#                                     id <TAB> path <TAB> Name <TAB> Icon
+#                                   unresolved ids get empty path/Name/Icon
+#   desktop-entry launch  <id>      start it through `gio launch`
+#
+# `Name` comes back translated: KConfig honours the caller's locale, and
+# plasmashell runs under the session one.
+#
+# An id may name a file inside one subdirectory of an applications directory
+# (BigLinux ships bigcontrolcenter/biglinux-settings.desktop that way), which
+# is why the pattern below allows a single slash — and nothing else. Ids reach
+# this script from user configuration, so anything that is not a plain desktop
+# id is rejected before it is ever used as a path.
+
+set -u
+
+readonly ID_PATTERN='^[A-Za-z0-9._+-]+(/[A-Za-z0-9._+-]+)?\.desktop$'
+
+valid_id() {
+    [[ $1 =~ $ID_PATTERN ]] || return 1
+    # A literal ".." can only appear as a whole component given the pattern
+    # above, but rejecting it explicitly keeps that reasoning local.
+    case "/$1/" in
+        */../*) return 1 ;;
+    esac
+    return 0
+}
+
+# Echo the XDG application directories, most specific first.
+app_dirs() {
+    printf '%s\n' "${XDG_DATA_HOME:-$HOME/.local/share}/applications"
+    local dirs="${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
+    local IFS=:
+    local d
+    for d in $dirs; do
+        [ -n "$d" ] && printf '%s\n' "$d/applications"
+    done
+}
+
+find_entry() {
+    local id="$1" dir
+    while IFS= read -r dir; do
+        if [ -f "$dir/$id" ]; then
+            printf '%s\n' "$dir/$id"
+            return 0
+        fi
+    done < <(app_dirs)
+    return 1
+}
+
+read_key() {
+    # Strips tabs and newlines: the output format is one TSV record per line.
+    kreadconfig6 --file "$1" --group 'Desktop Entry' --key "$2" 2>/dev/null |
+        tr -d '\t\r\n'
+}
+
+cmd_resolve() {
+    local id path name icon
+    for id in "$@"; do
+        if ! valid_id "$id"; then
+            continue
+        fi
+        if ! path="$(find_entry "$id")"; then
+            printf '%s\t\t\t\n' "$id"
+            continue
+        fi
+        # Entries marked Hidden are deleted as far as the desktop is
+        # concerned; NoDisplay ones are still launchable, so they stay.
+        if [ "$(read_key "$path" Hidden)" = "true" ]; then
+            printf '%s\t\t\t\n' "$id"
+            continue
+        fi
+        name="$(read_key "$path" Name)"
+        icon="$(read_key "$path" Icon)"
+        printf '%s\t%s\t%s\t%s\n' "$id" "$path" "$name" "$icon"
+    done
+}
+
+cmd_launch() {
+    local id="$1" path
+    valid_id "$id" || { printf 'invalid desktop id\n' >&2; return 2; }
+    path="$(find_entry "$id")" || { printf 'not installed\n' >&2; return 3; }
+    # gio launch applies the entry's own Exec, field codes and terminal flag,
+    # which is the whole point of going through the desktop file.
+    exec gio launch "$path"
+}
+
+case "${1:-}" in
+    resolve) shift; cmd_resolve "$@" ;;
+    launch)  shift; [ $# -eq 1 ] || { printf 'usage: desktop-entry launch <id>\n' >&2; exit 2; }
+             cmd_launch "$1" ;;
+    *)       printf 'usage: desktop-entry resolve <id>... | launch <id>\n' >&2; exit 2 ;;
+esac

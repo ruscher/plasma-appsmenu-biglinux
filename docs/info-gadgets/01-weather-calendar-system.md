@@ -115,3 +115,78 @@ confirming the new HTTPS chain really ran.
 by clicking, because Wayland blocks synthetic input and `spectacle` core-dumps
 on this VM. The radio buttons and the Apply button were not exercised by
 pointer.
+
+---
+
+# 2. Calendar — a clear icon and a real "Today" button
+
+## Icon
+
+`view-calendar` is an *action* glyph, not a calendar. Rather than guess a
+replacement, the names were checked against the theme the system actually uses
+(`bigicons-papient`):
+
+| name | present |
+|---|---|
+| `view-calendar` | yes (actions) |
+| `office-calendar` | **yes (apps)** — chosen |
+| `calendar` | yes (apps) |
+| `calendar-symbolic` | no |
+| `go-jump-today` | yes (actions) — used for the button |
+
+One finding matters beyond this gadget: **`bigicons-papient` declares
+`Inherits=hicolor` only**, with no Breeze underneath. A name the theme does not
+carry therefore renders as an empty gap rather than falling back to something.
+`Kirigami.Icon.fallback` is now set explicitly wherever a registry icon is
+drawn (`GadgetTitleBar`, `GadgetGallery`).
+
+## The button
+
+Returning to the current month existed, but only as an undocumented click on
+the month label — nobody finds that. It is now a real button beside the gadget
+title.
+
+It is **not** special-cased in the shared header. `GadgetHost` gained a
+`titleActions` list and `GadgetTitleBar` renders whatever a gadget puts there
+as tool buttons, so any gadget can publish one without the shared component
+knowing anything about calendars:
+
+```qml
+Component.onCompleted: host.titleActions = [todayAction]
+
+QQC2.Action {
+    id: todayAction
+    text: i18nc("@action:button jump the calendar back to the current day", "Today")
+    icon.name: "go-jump-today"
+    onTriggered: cal.goToToday()
+}
+```
+
+`goToToday()` re-reads `today` before calling `resetToToday()`, because the
+gadget may have been open across midnight and would otherwise return to
+yesterday's month. Everything that highlights the current day is bound to
+`today`, so the selection follows on its own.
+
+### Test (live, on the VM)
+
+```
+{"titleActions":1,"actionText":"Today","actionIcon":"go-jump-today",
+ "startMonth":"2026-09","afterNavigating":"2026-06","afterToday":"2026-09",
+ "currentMonth":"2026-09","backToCurrent":true}
+```
+
+Navigated three months back, pressed the action, landed back on the current
+month — **PASS**.
+
+---
+
+# 3. GPU Meter — position and icon
+
+`GadgetRegistry.defaultLayout` listed `gpu` **last**, far from its siblings.
+It now sits between them: `clock, weather, calendar, cpu, gpu, memory, …`.
+
+The icon was `"gpu"`, and there is no such icon: a search of every installed
+theme found no `gpu.svg` or `gpu.png` anywhere, and since the theme inherits
+only hicolor there is nothing to fall back to — so the tile drew a blank. It
+now uses `"cpu"`, as asked, which is present
+(`bigicons-papient/…/devices/cpu.svg`). No monitoring code was touched.

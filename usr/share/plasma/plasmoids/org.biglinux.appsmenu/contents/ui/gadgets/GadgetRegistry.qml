@@ -27,7 +27,7 @@ QtObject {
         { id: "clock",        name: i18n("Clock"),           icon: "clock",                  category: "time",
           description: i18n("Analog or digital clock with date and seconds"),
           sizes: ["1x1", "2x1"], defaultSize: "1x1", source: "ClockGadget.qml", online: false, multiple: true },
-        { id: "calendar",     name: i18n("Calendar"),        icon: "view-calendar",          category: "time",
+        { id: "calendar",     name: i18n("Calendar"),        icon: "office-calendar",        category: "time",
           description: i18n("Month view with today highlighted"),
           sizes: ["1x2", "2x2", "1x1"], defaultSize: "1x2", source: "CalendarGadget.qml", online: false, multiple: false },
         { id: "countdown",    name: i18n("Countdown"),       icon: "chronometer",            category: "time",
@@ -42,7 +42,7 @@ QtObject {
         { id: "cpu",          name: i18n("CPU Meter"),       icon: "cpu",                    category: "system",
           description: i18n("Usage of every core, frequency and temperature"),
           sizes: ["1x1", "2x1", "2x2"], defaultSize: "1x1", source: "CpuGadget.qml", online: false, multiple: false },
-        { id: "gpu",          name: i18n("GPU Meter"),       icon: "gpu",                    category: "system",
+        { id: "gpu",          name: i18n("GPU Meter"),       icon: "cpu",                    category: "system",
           description: i18n("Usage, temperature, VRAM and power of your graphics cards"),
           sizes: ["1x1", "2x1"], defaultSize: "1x1", source: "GpuGadget.qml", online: false, multiple: false },
         { id: "memory",       name: i18n("Memory"),          icon: "memory",                 category: "system",
@@ -109,6 +109,7 @@ QtObject {
         { id: "weather",      size: "2x1" },
         { id: "calendar",     size: "1x2" },
         { id: "cpu",          size: "1x1" },
+        { id: "gpu",          size: "1x1" },
         { id: "memory",       size: "1x1" },
         { id: "quicklinks",   size: "2x1" },
         { id: "drivemonitor", size: "1x1" },
@@ -123,6 +124,5 @@ QtObject {
         { id: "sports",       size: "2x1" },
         { id: "tips",         size: "1x1" },
         { id: "gallery",      size: "1x1" },
-        { id: "gpu",          size: "1x1" },
     ]
 }

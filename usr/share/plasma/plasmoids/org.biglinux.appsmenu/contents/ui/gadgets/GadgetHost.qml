@@ -68,6 +68,8 @@ Item {
         theme fallback for any gadget that states no colour of its own.  */
     property color accentColor: "transparent"
     readonly property color accent: accentColor.a > 0 ? accentColor : Kirigami.Theme.highlightColor
+    /*  Buttons the gadget wants beside its title; see GadgetTitleBar. */
+    property var titleActions: []
     property Component settingsComponent: null
     property string errorText: ""
     readonly property real contentPadding: Kirigami.Units.largeSpacing
@@ -222,6 +224,8 @@ Item {
                 online: host.def ? host.def.online : false
                 offline: host.offline
                 loading: host.loading
+                actions: host.titleActions
+                hostHovered: host.hovered
             }
         }
 
