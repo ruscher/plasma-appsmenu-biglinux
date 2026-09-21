@@ -26,7 +26,7 @@ Item {
     readonly property real usage: Number(pct.value) || 0
     readonly property real swapFrac: Number(sTotal.value) > 0 ? (Number(sUsed.value) || 0) / Number(sTotal.value) : 0
 
-    Component.onCompleted: host.accent = "#3b82f6"
+    Component.onCompleted: host.accentColor = "#3b82f6"
     function gb(v) { const n = Number(v) || 0; return (n / (1024 * 1024 * 1024)).toLocaleString(Qt.locale(), "f", 1) }
 
     RowLayout {

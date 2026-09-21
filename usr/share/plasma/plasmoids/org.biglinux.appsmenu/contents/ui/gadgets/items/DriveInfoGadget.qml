@@ -18,7 +18,7 @@ Item {
 
     property var volumeIds: []    // "disk/<id>"
 
-    Component.onCompleted: host.accent = "#f97316"
+    Component.onCompleted: host.accentColor = "#f97316"
     Binding { target: drives.host; property: "subtitle"; value: drives.volumeIds.length ? i18np("%1 volume", "%1 volumes", drives.volumeIds.length) : "" }
 
     Sensors.SensorTreeModel { id: tree }

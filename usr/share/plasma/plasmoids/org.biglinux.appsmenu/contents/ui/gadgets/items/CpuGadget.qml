@@ -66,7 +66,7 @@ Item {
     readonly property real usage: Number(total.value) || 0
     readonly property color gaugeColor: usage > 85 ? Kirigami.Theme.negativeTextColor : (usage > 60 ? Kirigami.Theme.neutralTextColor : cpu.host.accent)
 
-    Component.onCompleted: host.accent = "#22c55e"
+    Component.onCompleted: host.accentColor = "#22c55e"
     Binding { target: cpu.host; property: "subtitle"; value: cpu.cores > 0 ? i18np("%1 thread", "%1 threads", cpu.cores) : "" }
 
     // per-core sensors

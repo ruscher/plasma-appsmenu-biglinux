@@ -43,7 +43,7 @@ Item {
     readonly property bool hasLive: liveEvents.length > 0
 
     Component.onCompleted: {
-        host.accent = "#22c55e"
+        host.accentColor = "#22c55e"
         host.settingsComponent = settings
         load()
     }

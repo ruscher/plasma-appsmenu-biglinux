@@ -22,11 +22,11 @@ Item {
     readonly property color paper: palette[colorKey] || palette.yellow
 
     Component.onCompleted: {
-        host.accent = paper
+        host.accentColor = paper
         host.settingsComponent = settings
         area.text = host.cfg.text || ""
     }
-    onPaperChanged: host.accent = paper
+    onPaperChanged: host.accentColor = paper
 
     Timer {
         id: saveTimer

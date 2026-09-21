@@ -24,7 +24,7 @@ Item {
     property date now: new Date()
 
     Component.onCompleted: {
-        host.accent = "#3b82f6"
+        host.accentColor = "#3b82f6"
         host.settingsComponent = settings
     }
 

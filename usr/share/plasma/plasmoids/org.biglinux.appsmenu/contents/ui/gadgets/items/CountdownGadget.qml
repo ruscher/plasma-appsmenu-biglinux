@@ -27,7 +27,7 @@ Item {
     readonly property var next: pending.length ? pending[0] : null
 
     Component.onCompleted: {
-        host.accent = "#a855f7"
+        host.accentColor = "#a855f7"
         host.settingsComponent = settings
     }
     Timer { interval: 1000; running: cd.host.active && cd.next !== null; repeat: true; triggeredOnStart: true; onTriggered: cd.tick() }

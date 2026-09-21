@@ -45,10 +45,11 @@ Item {
     ]
     readonly property bool online: host.cfg.online === true
     property int index: 0
-    property var current: local[0]
+    /*  A literal, not a binding on `local`, so onCompleted may set it. */
+    property var current: null
 
     Component.onCompleted: {
-        host.accent = "#f59e0b"
+        host.accentColor = "#f59e0b"
         host.settingsComponent = settings
         const day = Math.floor(Date.now() / 86400000)
         index = day % local.length

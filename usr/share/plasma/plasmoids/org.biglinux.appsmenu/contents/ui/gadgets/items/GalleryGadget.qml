@@ -26,7 +26,7 @@ Item {
     property int index: 0
     property bool front: true   // which layer is on top
 
-    Component.onCompleted: { host.accent = "#06b6d4"; host.settingsComponent = settings }
+    Component.onCompleted: { host.accentColor = "#06b6d4"; host.settingsComponent = settings }
     Binding { target: gallery.host; property: "subtitle"; value: files.count > 0 ? (gallery.index + 1) + "/" + files.count : "" }
 
     FolderListModel {

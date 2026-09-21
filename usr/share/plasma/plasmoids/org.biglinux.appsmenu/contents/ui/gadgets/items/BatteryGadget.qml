@@ -40,7 +40,7 @@ Item {
     Sensors.Sensor { id: gpu1Power; sensorId: "gpu/gpu1/power"; enabled: bat.host.active && !bat.hasBattery; updateRateLimit: 2000 }
     readonly property real gpuWatts: (Number(gpu0Power.value) || 0) + (Number(gpu1Power.value) || 0)
 
-    Component.onCompleted: host.accent = "#84cc16"
+    Component.onCompleted: host.accentColor = "#84cc16"
     Binding { target: bat.host; property: "subtitle"; value: bat.hasBattery ? (bat.charging ? i18n("Charging") : (bat.full ? i18n("Full") : i18n("On battery"))) : i18n("Mains power") }
 
     function remaining() {

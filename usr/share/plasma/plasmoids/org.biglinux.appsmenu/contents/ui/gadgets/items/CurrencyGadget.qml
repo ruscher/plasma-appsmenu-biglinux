@@ -26,7 +26,7 @@ Item {
     property bool busy: false
 
     Component.onCompleted: {
-        host.accent = "#16a34a"
+        host.accentColor = "#16a34a"
         host.settingsComponent = settings
         const cached = host.cacheGet("rates")
         if (cached && cached.v && cached.v.base === base) fx = cached.v

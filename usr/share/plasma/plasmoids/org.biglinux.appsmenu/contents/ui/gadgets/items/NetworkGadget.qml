@@ -25,7 +25,7 @@ Item {
     property var downHist: []
     property var upHist: []
 
-    Component.onCompleted: host.accent = "#8b5cf6"
+    Component.onCompleted: host.accentColor = "#8b5cf6"
 
     Timer {
         interval: net.rate

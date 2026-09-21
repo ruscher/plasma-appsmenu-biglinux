@@ -31,7 +31,7 @@ Item {
     readonly property var links: host.cfg.links && host.cfg.links.length ? host.cfg.links : defaults
 
     Component.onCompleted: {
-        host.accent = "#14b8a6"
+        host.accentColor = "#14b8a6"
         host.settingsComponent = settings
     }
 

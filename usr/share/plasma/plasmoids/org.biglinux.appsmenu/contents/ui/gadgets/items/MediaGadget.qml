@@ -26,7 +26,7 @@ Item {
     readonly property real position: hasPlayer && player.position ? player.position : 0
     readonly property string artUrl: hasPlayer ? (player.artUrl || "") : ""
 
-    Component.onCompleted: host.accent = "#ec4899"
+    Component.onCompleted: host.accentColor = "#ec4899"
     Binding { target: media.host; property: "subtitle"; value: media.hasPlayer ? (media.player.identity || "") : "" }
 
     // Keep the position fresh while playing (MPRIS only pushes changes on seek)

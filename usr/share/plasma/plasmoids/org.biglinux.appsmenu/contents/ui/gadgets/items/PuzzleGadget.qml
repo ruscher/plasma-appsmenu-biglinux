@@ -27,7 +27,7 @@ Item {
     // one level of undo, captured before each move
     property var undoState: null
 
-    Component.onCompleted: { host.accent = "#eab308"; reset() }
+    Component.onCompleted: { host.accentColor = "#eab308"; reset() }
     Binding { target: game.host; property: "subtitle"; value: i18n("Best %1", game.best) }
 
     // ── model: one entry per tile, positioned by row/col ──

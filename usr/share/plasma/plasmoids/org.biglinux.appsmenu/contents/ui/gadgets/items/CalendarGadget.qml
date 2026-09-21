@@ -34,7 +34,7 @@ Item {
     readonly property var enabledIds: host.cfg.plugins || []
 
     Component.onCompleted: {
-        host.accent = "#ef4444"
+        host.accentColor = "#ef4444"
         host.settingsComponent = settings
     }
     Connections {

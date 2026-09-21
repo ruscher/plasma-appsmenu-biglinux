@@ -24,7 +24,7 @@ Item {
     property var readHist: []
     property var writeHist: []
 
-    Component.onCompleted: host.accent = "#f97316"
+    Component.onCompleted: host.accentColor = "#f97316"
 
     Timer {
         interval: dm.rate

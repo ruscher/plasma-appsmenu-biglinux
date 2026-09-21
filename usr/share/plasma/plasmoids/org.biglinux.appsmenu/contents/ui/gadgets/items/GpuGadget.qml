@@ -44,7 +44,7 @@ Item {
     Timer { id: rediscover; interval: 500; onTriggered: gpu.discover() }
     Timer { interval: 1500; running: true; onTriggered: gpu.discover() }
 
-    Component.onCompleted: host.accent = "#f43f5e"
+    Component.onCompleted: host.accentColor = "#f43f5e"
     Binding { target: gpu.host; property: "subtitle"; value: gpu.gpuIds.length > 1 ? i18np("%1 GPU", "%1 GPUs", gpu.gpuIds.length) : "" }
 
     function gb(v) { return ((Number(v) || 0) / 1024 / 1024 / 1024).toLocaleString(Qt.locale(), "f", 1) }

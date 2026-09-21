@@ -36,7 +36,7 @@ Item {
     property var xhr: null
 
     Component.onCompleted: {
-        host.accent = "#f97316"
+        host.accentColor = "#f97316"
         host.settingsComponent = settings
         loadFromCacheOrFetch()
     }

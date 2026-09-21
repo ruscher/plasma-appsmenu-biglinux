@@ -61,7 +61,7 @@ Item {
     }
 
     Component.onCompleted: {
-        host.accent = "#0ea5e9"
+        host.accentColor = "#0ea5e9"
         host.settingsComponent = settings
         servedKey = requestKey
         const cached = cachedForecast()
