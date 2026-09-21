@@ -144,6 +144,42 @@ which hides everything), opening Home and Places produced:
 
 `qmllint` reports no syntax errors on the four changed QML files.
 
+## M · Toggle robustness (no daemon restart)
+
+Five consecutive `disable` → `enable` cycles through the helper, checking the
+daemon's real behaviour after each half-cycle, with the daemon never restarted:
+
+```
+daemon pid at start: 1296850
+cycle 1: disable=blocked  enable=recording pid=1296850
+cycle 2: disable=blocked  enable=recording pid=1296850
+cycle 3: disable=blocked  enable=recording pid=1296850
+cycle 4: disable=blocked  enable=recording pid=1296850
+cycle 5: disable=blocked  enable=recording pid=1296850
+daemon pid at end: 1296850
+```
+
+PASS. The `kwriteconfig6 --notify` approach applies in both directions
+repeatedly without restarting or wedging kactivitymanagerd.
+
+### One observation, not caused by this change
+
+Late in the session the running kactivitymanagerd stopped persisting events
+while its configuration was correct (`tracking=on`, empty
+`off-the-record-activities`) — the sqlite WAL had not been written for some
+minutes and freshly injected events produced no rows. `systemctl --user
+restart plasma-kactivitymanagerd.service` restored it immediately, and the
+stress test above then ran clean.
+
+The most likely trigger is the earlier deliberate probe that made the daemon
+exit (`IsFeatureOperational` with a plugin name, see
+[02](recent-files-02-root-cause.md) §8), combined with the repeated
+plasmashell restarts and cache clears used to take screenshots. It is a
+daemon-side robustness issue in kactivitymanagerd, not something the fix does:
+the new code only writes configuration keys and never restarts or kills
+anything. Worth knowing for support — `recent-activity diagnose` prints the
+`ResourceEvent` row count, which is how this was spotted.
+
 ## L · Session type
 
 Tested on **Wayland** only — that is what the VM runs. The implementation

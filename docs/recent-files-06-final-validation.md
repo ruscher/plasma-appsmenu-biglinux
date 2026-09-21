@@ -78,6 +78,16 @@ configures with `shownItems = 1` (applications only) because the Home page's
 populated and working; whether "History" should instead show everything is a
 design decision, not part of this fix.
 
+## Known, pre-existing, not caused by this change
+
+Once during the session the running kactivitymanagerd stopped writing events to
+its database while its configuration was correct; a service restart fixed it,
+and five consecutive disable/enable cycles afterwards were clean with the
+daemon's PID unchanged (05 §M). The new code only writes configuration keys —
+it never restarts or kills anything — so this is a daemon-side issue rather
+than a regression. `recent-activity diagnose` reports the `ResourceEvent` row
+count, which is the quickest way to recognise it in a support case.
+
 ## Restored after testing
 
 - `off-the-record-activities` cleared, feature on (the VM's working state).
