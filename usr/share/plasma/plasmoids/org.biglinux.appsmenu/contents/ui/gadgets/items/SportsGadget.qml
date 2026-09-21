@@ -15,6 +15,7 @@ import QtQuick.Controls 2.15 as QQC2
 import org.kde.plasma.components 3.0 as PC3
 import org.kde.kirigami 2.20 as Kirigami
 import "../lib/GadgetNet.js" as Net
+import org.kde.notification as KNotification
 import "../lib/SportsTheSportsDB.js" as Provider
 
 Item {
@@ -26,7 +27,15 @@ Item {
     readonly property int current: Math.max(0, Math.min(leagues.length - 1, host.cfg.current || 0))
     readonly property string leagueId: leagues[current]
     readonly property var league: Provider.leagueById(leagueId)
-    readonly property int liveMs: 60 * 1000
+    /*  How often live scores are polled while the gadget is on screen. The
+        provider's free tier is modest, so 30 s is the floor offered and the
+        list is deliberately short. Fixtures stay on their own slow timer.  */
+    readonly property var liveIntervals: [30, 60, 120, 300]
+    readonly property int liveSeconds: {
+        const v = Number(host.cfg.liveInterval)
+        return liveIntervals.indexOf(v) !== -1 ? v : 60
+    }
+    readonly property int liveMs: liveSeconds * 1000
     readonly property int fixturesMs: 30 * 60 * 1000
 
     property var liveEvents: []      // this league's live matches
@@ -41,6 +50,76 @@ Item {
         return liveEvents.concat(pre, post)
     }
     readonly property bool hasLive: liveEvents.length > 0
+
+    readonly property bool notify: host.cfg.notify === true
+
+    /*  Last state seen per match, so a notification is sent on a *change* and
+        never twice for the same one. This only runs while the gadget is on
+        screen — the menu is not a background service, and adding a daemon for
+        score alerts is not a trade this project makes. The settings text says
+        so plainly.  */
+    property var seenData
+    readonly property var seen: seenData !== undefined ? seenData : ({})
+
+    function notifyChanges(events) {
+        if (!notify) {
+            /*  Keep following the state anyway, so switching notifications on
+                does not immediately announce matches that were already live. */
+            seenData = snapshot(events)
+            return
+        }
+        const before = seen
+        const after = snapshot(events)
+        for (const e of events) {
+            const was = before[e.id]
+            const now = after[e.id]
+            if (!was) {
+                if (e.state === "in") {
+                    send(i18nc("@title:window a match has kicked off", "Match started"), matchLine(e))
+                }
+                continue
+            }
+            if (was.state !== "in" && now.state === "in") {
+                send(i18nc("@title:window a match has kicked off", "Match started"), matchLine(e))
+            } else if (was.state === "in" && now.state !== "in" && now.state !== "pre") {
+                send(i18nc("@title:window a match is over", "Match finished"), matchLine(e))
+            } else if (now.state === "in" && was.score !== now.score) {
+                send(i18nc("@title:window the score changed", "Goal"), matchLine(e))
+            }
+        }
+        seenData = after
+    }
+
+    function snapshot(events) {
+        const m = {}
+        for (const e of events) {
+            m[e.id] = { state: e.state, score: (e.home.score || "") + "-" + (e.away.score || "") }
+        }
+        return m
+    }
+
+    function matchLine(e) {
+        return i18nc("@info:status home team, score, away team",
+                     "%1 %2 – %3 %4", e.home.name, e.home.score || "0",
+                     e.away.score || "0", e.away.name)
+    }
+
+    function send(title, text) {
+        const n = notificationComponent.createObject(sports, { title: title, text: text })
+        if (n) {
+            n.sendEvent()
+        }
+    }
+
+    Component {
+        id: notificationComponent
+        KNotification.Notification {
+            componentName: "plasma_workspace"
+            eventId: "notification"
+            iconName: "applications-sports"
+            autoDelete: true
+        }
+    }
 
     Component.onCompleted: {
         host.accentColor = "#22c55e"
@@ -75,6 +154,7 @@ Item {
             host.offline = false
             host.sharedCacheSet(liveKey(), Net.cacheEntry(list))
             liveEvents = list.filter(e => e.leagueId === id)
+            sports.notifyChanges(sports.liveEvents)
         })
     }
     function refreshFixtures() {
@@ -131,6 +211,14 @@ Item {
 
         ListView {
             id: list
+
+            /*  Following several leagues easily exceeds the card; the list
+                scrolls rather than cutting matches off. */
+            QQC2.ScrollBar.vertical: PC3.ScrollBar {
+                policy: list.contentHeight > list.height ? QQC2.ScrollBar.AsNeeded
+                                                         : QQC2.ScrollBar.AlwaysOff
+            }
+            flickableDirection: Flickable.VerticalFlick
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
@@ -164,26 +252,73 @@ Item {
                     anchors.rightMargin: Kirigami.Units.smallSpacing
                     spacing: Kirigami.Units.smallSpacing
 
+                    /*  Both sides are laid out identically and share the
+                        leftover width equally: `preferredWidth: 0` gives them
+                        the same base, so the remainder splits evenly and the
+                        score pill sits in the true centre of the row whatever
+                        the names are. They used to be plain fillWidth items,
+                        whose base widths differed with the name lengths, which
+                        is what pushed the score off centre.  */
                     component Team : RowLayout {
+                        id: teamRow
                         property var team: ({})
                         property bool alignRight: false
-                        spacing: 4
+                        readonly property int logoSize: sports.host.wide ? Kirigami.Units.iconSizes.medium
+                                                                         : Kirigami.Units.iconSizes.smallMedium
+                        spacing: Kirigami.Units.smallSpacing
                         layoutDirection: alignRight ? Qt.RightToLeft : Qt.LeftToRight
                         Layout.fillWidth: true
-                        Image {
-                            source: team && team.logo ? team.logo : ""
-                            asynchronous: true
-                            sourceSize.width: 32; sourceSize.height: 32
-                            Layout.preferredWidth: Kirigami.Units.iconSizes.small
-                            Layout.preferredHeight: Kirigami.Units.iconSizes.small
-                            visible: status === Image.Ready
+                        Layout.preferredWidth: 0
+                        Layout.minimumWidth: 0
+
+                        /*  A fixed slot, so rows line up whether or not a
+                            badge exists, and the fallback fills it when the
+                            provider has no logo or the download fails. */
+                        Item {
+                            Layout.preferredWidth: teamRow.logoSize
+                            Layout.preferredHeight: teamRow.logoSize
+                            Layout.alignment: Qt.AlignVCenter
+
+                            Image {
+                                id: badge
+                                anchors.fill: parent
+                                source: team && team.logo ? team.logo : ""
+                                asynchronous: true
+                                fillMode: Image.PreserveAspectFit
+                                sourceSize.width: 64
+                                sourceSize.height: 64
+                                visible: status === Image.Ready
+                            }
+                            Rectangle {
+                                anchors.fill: parent
+                                visible: !badge.visible
+                                radius: width / 2
+                                color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g,
+                                               Kirigami.Theme.textColor.b, 0.12)
+                                PC3.Label {
+                                    anchors.centerIn: parent
+                                    text: teamRow.team ? teamRow.team.abbr : ""
+                                    font.pointSize: Kirigami.Theme.smallFont.pointSize * 0.8
+                                    font.weight: Font.Bold
+                                    opacity: 0.7
+                                }
+                            }
                         }
+
                         PC3.Label {
                             text: team ? (sports.host.wide ? team.name : team.abbr) : ""
                             font.pointSize: Kirigami.Theme.smallFont.pointSize
                             elide: Text.ElideRight
+                            maximumLineCount: 1
                             Layout.fillWidth: true
+                            Layout.minimumWidth: 0
                             horizontalAlignment: alignRight ? Text.AlignRight : Text.AlignLeft
+
+                            /*  The full name stays available once it elides. */
+                            PC3.ToolTip.text: teamRow.team ? teamRow.team.name : ""
+                            PC3.ToolTip.visible: nameHover.hovered && truncated
+                            PC3.ToolTip.delay: Kirigami.Units.toolTipDelay
+                            HoverHandler { id: nameHover }
                         }
                     }
                     Team { team: row.modelData.home }
@@ -244,28 +379,79 @@ Item {
         ColumnLayout {
             property var host
             spacing: Kirigami.Units.largeSpacing
+            id: se
+
             PC3.Label { text: i18n("Leagues to follow"); font.weight: Font.DemiBold }
-            Flow {
+
+            /*  A Flow left ragged rows and pushed the last leagues out of
+                sight. A grid with a column count chosen from the real width
+                keeps every league inside the dialog: three abreast when there
+                is room, two at medium width, one only when there is no other
+                option. The dialog itself scrolls vertically, so a long list
+                stays reachable.  */
+            GridLayout {
                 Layout.fillWidth: true
-                spacing: Kirigami.Units.smallSpacing
+                columnSpacing: Kirigami.Units.smallSpacing
+                rowSpacing: 0
+                columns: se.width > Kirigami.Units.gridUnit * 28 ? 3
+                       : (se.width > Kirigami.Units.gridUnit * 17 ? 2 : 1)
+
                 Repeater {
                     model: Provider.LEAGUES
                     delegate: QQC2.CheckBox {
                         required property var modelData
+                        Layout.fillWidth: true
+                        Layout.minimumWidth: 0
                         text: modelData.icon + " " + modelData.name
                         checked: (host.cfg.leagues || sports.defaultLeagues).map(String).indexOf(modelData.id) >= 0
                         onToggled: {
                             let l = (host.cfg.leagues || sports.defaultLeagues).map(String)
                             if (checked && l.indexOf(modelData.id) < 0) l.push(modelData.id)
                             if (!checked) l = l.filter(x => x !== modelData.id)
+                            /*  Following nothing would leave the card blank,
+                                so the last league cannot be unticked. */
                             if (l.length === 0) l = [modelData.id]
                             host.saveCfg(Object.assign({}, host.cfg, { leagues: l, current: 0 }))
                         }
                     }
                 }
             }
+
+            Kirigami.Separator { Layout.fillWidth: true; opacity: 0.3 }
+
+            Kirigami.FormLayout {
+                Layout.fillWidth: true
+
+                QQC2.ComboBox {
+                    Kirigami.FormData.label: i18n("Refresh live scores:")
+                    model: [
+                        i18nc("@item:inlistbox refresh interval", "Every 30 seconds"),
+                        i18nc("@item:inlistbox refresh interval", "Every minute"),
+                        i18nc("@item:inlistbox refresh interval", "Every 2 minutes"),
+                        i18nc("@item:inlistbox refresh interval", "Every 5 minutes")
+                    ]
+                    currentIndex: Math.max(0, sports.liveIntervals.indexOf(sports.liveSeconds))
+                    onActivated: host.setCfg("liveInterval", sports.liveIntervals[currentIndex])
+                }
+
+                QQC2.CheckBox {
+                    Kirigami.FormData.label: i18n("Notifications:")
+                    text: i18n("Notify me about live matches")
+                    checked: host.cfg.notify === true
+                    onToggled: host.setCfg("notify", checked)
+                }
+            }
+
             PC3.Label {
-                text: i18n("Data from TheSportsDB (free API). Live scores refresh every minute and fixtures every 30 minutes, only while this page is open.")
+                visible: host.cfg.notify === true
+                text: i18n("Kick-off, goals and full time are announced. They can only be noticed while this page is open — the menu does not run in the background, so no alerts arrive while it is closed.")
+                opacity: 0.6
+                wrapMode: Text.Wrap
+                font.pointSize: Kirigami.Theme.smallFont.pointSize
+                Layout.fillWidth: true
+            }
+            PC3.Label {
+                text: i18n("Data from TheSportsDB (free API). Fixtures refresh every 30 minutes, and nothing is fetched while this page is closed.")
                 opacity: 0.6; wrapMode: Text.Wrap; font.pointSize: Kirigami.Theme.smallFont.pointSize; Layout.fillWidth: true
             }
         }
