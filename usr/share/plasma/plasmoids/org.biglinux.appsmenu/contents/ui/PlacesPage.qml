@@ -90,6 +90,13 @@ EmptyPage {
     /* Everything except Computer depends on the activity history being on. */
     readonly property bool needsActivityHistory: root.currentCategory !== root.categoryComputer
 
+    /* RecentActivityTracking reports a state string, not a boolean: "on",
+       "limited", "off", "error" or "unknown" while the first probe is still in
+       flight. "unknown" counts as working, so the call to action never flashes
+       on a healthy system — the same rule HomePage uses. */
+    readonly property bool historyOff: recentActivity.trackingState === "off"
+        || recentActivity.trackingState === "error"
+
     T.StackView.onActivated: {
         kickoff.sideBar = categorySidebar
         kickoff.contentArea = root
@@ -244,7 +251,7 @@ EmptyPage {
             Layout.fillHeight: true
 
             function focusContent() {
-                if (root.needsActivityHistory && !recentActivity.tracking) {
+                if (root.needsActivityHistory && root.historyOff) {
                     enableHistoryButton.forceActiveFocus(Qt.TabFocusReason)
                 } else if (root.currentCategory === root.categoryFrequent) {
                     frequentView.focusFirstSection()
@@ -261,7 +268,7 @@ EmptyPage {
             Loader {
                 anchors.centerIn: parent
                 width: Math.min(parent.width - Kirigami.Units.gridUnit * 2, Kirigami.Units.gridUnit * 22)
-                active: root.needsActivityHistory && !recentActivity.tracking
+                active: root.needsActivityHistory && root.historyOff
                 visible: active
                 z: 2
 
@@ -330,7 +337,7 @@ EmptyPage {
 
                 anchors.fill: parent
                 visible: root.currentCategory === root.categoryFrequent
-                    && recentActivity.tracking
+                    && !root.historyOff
                 enabled: visible
                 clip: true
                 contentWidth: width
@@ -519,7 +526,7 @@ EmptyPage {
                 id: historyList
 
                 anchors.fill: parent
-                visible: root.showingHistory && recentActivity.tracking
+                visible: root.showingHistory && !root.historyOff
                 enabled: visible
 
                 mainContentView: true
