@@ -161,3 +161,88 @@ failure.
 **NOT TESTED:** wheel, trackpad and drag on the strip were not exercised by
 real input — Wayland blocks synthetic input. Overflow detection and the full
 model were verified from the running engine.
+
+---
+
+# 6. Drive Info — a count that tells the truth, and devices that come and go
+
+## Why the header disagreed with the list
+
+The gadget discovered volumes by walking the KSystemStats sensor tree for
+`disk/<id>/total`, counted what it found, and then rendered only the rows whose
+`total` sensor had produced a value (`visible: Number(total.value) > 0`).
+Anything discovered but silent was counted and invisible — permanently.
+
+Probing the live tree showed exactly what was being counted:
+
+```
+volumeIds = ["disk/(?!all).*", "disk/0b033158-d636-4006-b254-120be8ee5fc1", "disk/vda"]
+```
+
+The first entry is not a device. It is a **wildcard sensor whose id is
+literally the string `disk/(?!all).*`**, and it matched the discovery pattern,
+was counted, and of course never reported a size. Three counted, two drawn.
+The other two are the same storage seen twice — the filesystem by UUID and the
+physical disk.
+
+## Which API
+
+The brief asked for an evaluation rather than a guess, so both were probed side
+by side on the same machine. Ground truth: one btrfs volume on `/dev/vda1`
+(mounted at `/`, `/home`, `/var/log`, `/var/cache` — subvolumes of one
+filesystem) and an optical disc.
+
+| | KSystemStats | Solid (`hotplug` + `soliddevice`) |
+|---|---|---|
+| what it reported | 3 entries, one a wildcard string, one a duplicate | 2 devices, exactly the real ones |
+| removability | not exposed | `Removable` |
+| mounted state | inferred from a sensor arriving | `Accessible` |
+| sizes | raw bytes, formatted by hand | `Free Space Text` / `Size Text`, already localised (`38,0 GiB`) |
+| icon | guessed from the name | `Icon`, the same one the rest of the desktop uses |
+| pseudo-filesystems | present | never appear |
+| hotplug | only if the tree happens to emit `rowsInserted` | event driven by design |
+
+Solid wins on every line, so the gadget was rewritten on it. Nothing parses
+`lsblk`, nothing polls, and no byte arithmetic is left.
+
+The count can no longer drift because the header counts the **same list** the
+view renders: mounted storage volumes, then removable devices that are present
+but not mounted (worth seeing precisely because they are there and
+unavailable). An unmounted internal partition is not a drive the user is
+looking for, so it stays out.
+
+Rows are told apart without a legend: the system volume (`File Path == "/"`) is
+badged *System* and sorted first, removable devices are badged *Removable*, and
+the list scrolls vertically once there are more devices than fit.
+
+## Hotplug test — a real device, attached to the running VM
+
+The VM's kernel has neither `loop` nor `usb-storage`, and polkit refuses
+`udisksctl` over SSH, so the device was hot-attached from the hypervisor with
+`virsh attach-disk … --live` (a 128 MiB vfat image labelled `PROBEUSB`). No
+persistent change was made to the domain, and the disk list is back to its
+original two entries.
+
+| stage | Solid sources | rows rendered | header |
+|---|---|---|---|
+| baseline | 2 | 2 | 2 volumes |
+| disk attached, unmounted | **3** | 2 | 2 volumes |
+| mounted | 3 | **3** | **3 volumes** |
+| unmounted | 3 | 2 | 2 volumes |
+| detached | **2** | 2 | 2 volumes |
+
+Solid saw the device the moment it was attached, with no polling and no
+restart, and the header agreed with the list at every step. The new volume
+reported `127,7 MiB free of 127,7 MiB`.
+
+Baseline detail, for the record:
+
+```
+Disco interno de 50,0 GiB (vda1)  /  System      38,0 GiB free of 50,0 GiB  24%
+BIGLINUX_LIVE_KDE   /mnt/BIGLINUX_LIVE_KDE  Removable   0 B free of 5,1 GiB  100%
+```
+
+**NOT TESTED:** a real USB stick. The kernel in this image ships no
+`usb-storage` driver, so the QEMU USB disk enumerated (`QEMU USB HARDDRIVE` in
+dmesg) but never produced a block device; the virtio path was used instead,
+which exercises the same Solid code.
