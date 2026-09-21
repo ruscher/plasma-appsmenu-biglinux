@@ -35,6 +35,9 @@ EmptyPage {
     // Set to "" to disable (sidebars, search page with its own placeholder).
     property string emptyText: mainContentView ? i18nc("@info:status", "No applications here yet") : ""
 
+    // Icon for the empty state, so pages can match it to what is missing.
+    property string emptyIconName: "edit-none"
+
     signal showSectionViewRequested(string sectionName)
 
     clip: view.height < view.contentHeight
@@ -48,7 +51,7 @@ EmptyPage {
         visible: active
         asynchronous: true
         sourceComponent: PlasmaExtras.PlaceholderMessage {
-            iconName: "edit-none"
+            iconName: root.emptyIconName
             text: root.emptyText
             Accessible.role: Accessible.StaticText
         }

@@ -5,9 +5,13 @@
 
     SPDX-License-Identifier: GPL-2.0-or-later
 
-    PowerMenu — a "Leave" menu button (all session/power actions) followed by
-    quick icon buttons for the configured system favorites (default:
-    log out · reboot · shut down).
+    PowerMenu — quick icon buttons for the configured system favorites
+    (default: log out · reboot · shut down), followed by an "Options" kebab
+    button holding the remaining session/power actions. In a narrow popup the
+    quick buttons collapse and everything moves into the menu.
+
+    All actions go through Kicker.SystemModel, i.e. Plasma's own session
+    handling — never shell commands like `systemctl poweroff`.
 */
 
 import QtQuick 2.15
@@ -71,35 +75,9 @@ RowLayout {
             : (sourceRow, sourceParent) => !systemFavoritesContainsRow(sourceRow, sourceParent)
     }
 
-    // ── "Leave" menu button ──
-    PC3.ToolButton {
-        id: leaveButton
-
-        Accessible.role: Accessible.ButtonMenu
-        Accessible.name: text
-
-        icon.name: "system-log-out-symbolic"
-        icon.width: Kirigami.Units.iconSizes.smallMedium
-        icon.height: Kirigami.Units.iconSizes.smallMedium
-        display: PC3.AbstractButton.TextBesideIcon
-        text: i18nc("@action:button open session/power menu", "Leave")
-        down: contextMenu.status === PlasmaExtras.Menu.Open || pressed
-
-        PC3.ToolTip.text: i18n("Session and power options")
-        PC3.ToolTip.visible: hovered
-        PC3.ToolTip.delay: Kirigami.Units.toolTipDelay
-
-        Keys.onTabPressed: event => {
-            if (root.shouldCollapseButtons || buttonRepeater.count === 0) {
-                kickoff.firstHeaderItem.forceActiveFocus(Qt.TabFocusReason)
-            } else {
-                event.accepted = false
-            }
-        }
-        onPressed: contextMenu.openRelative()
-    }
-
-    // ── Quick icon buttons (logout / reboot / shutdown by default) ──
+    // ── Quick icon buttons (logout / reboot / shut down by default) ──
+    // These come first: Options is the overflow, so it belongs at the end of
+    // the row, after the actions the user reaches most often.
     RowLayout {
         id: buttonRepeaterRow
         visible: !root.shouldCollapseButtons
@@ -126,15 +104,45 @@ RowLayout {
                 PC3.ToolTip.delay: Kirigami.Units.toolTipDelay
                 PC3.ToolTip.visible: display === PC3.AbstractButton.IconOnly && hovered
 
+                // Tab moves on to Options, which is the next item in the row.
                 Keys.onTabPressed: event => {
-                    if (index === buttonRepeater.count - 1) {
-                        kickoff.firstHeaderItem.forceActiveFocus(Qt.TabFocusReason)
-                    } else {
-                        event.accepted = false
-                    }
+                    event.accepted = false
                 }
             }
         }
+    }
+
+    // ── "Options" menu button (kebab) ──
+    // Last in the row, after the quick buttons. When the popup is too narrow
+    // the quick buttons collapse into this menu, so it is then the only
+    // control here and still reachable.
+    PC3.ToolButton {
+        id: leaveButton
+
+        Accessible.role: Accessible.ButtonMenu
+        Accessible.name: i18nc("@action:button open session and power options", "Options")
+        Accessible.description: i18n("Opens a menu with session and power actions")
+
+        // Kebab (⋮). view-more-symbolic ships with Breeze, Breeze Dark and the
+        // BigLinux icon theme; view-more-horizontal-symbolic is the "…"
+        // variant and is deliberately not used here.
+        icon.name: "view-more-symbolic"
+        icon.width: Kirigami.Units.iconSizes.smallMedium
+        icon.height: Kirigami.Units.iconSizes.smallMedium
+        // Icon only: the kebab is the affordance, and the row is tight once
+        // the quick buttons sit next to it.
+        display: PC3.AbstractButton.IconOnly
+        text: i18nc("@action:button open session and power options", "Options")
+        down: contextMenu.status === PlasmaExtras.Menu.Open || pressed
+
+        PC3.ToolTip.text: text
+        PC3.ToolTip.visible: hovered
+        PC3.ToolTip.delay: Kirigami.Units.toolTipDelay
+
+        Keys.onTabPressed: event => {
+            kickoff.firstHeaderItem.forceActiveFocus(Qt.TabFocusReason)
+        }
+        onPressed: contextMenu.openRelative()
     }
 
     Instantiator {

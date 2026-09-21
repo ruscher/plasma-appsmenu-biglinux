@@ -4,3 +4,6 @@ DragDropArea 1.0 DragDropArea.qml
 OnboardingOverlay 1.0 OnboardingOverlay.qml
 PowerMenu 1.0 PowerMenu.qml
 RecentActivityTracking 1.0 RecentActivityTracking.qml
+SoftwareSearch 1.0 SoftwareSearch.qml
+ActivitySection 1.0 ActivitySection.qml
+DeviceSection 1.0 DeviceSection.qml

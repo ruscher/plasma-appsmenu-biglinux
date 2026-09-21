@@ -1,0 +1,302 @@
+#!/usr/bin/env bash
+#
+# recent-activity — the single source of truth for "Recent Files & Locations"
+# on Plasma 6 / KDE Frameworks 6.
+#
+# SPDX-FileCopyrightText: 2026 BigLinux Team
+# SPDX-License-Identifier: GPL-2.0-or-later
+#
+# CANONICAL FILE. Keep byte-identical copies in:
+#   plasma-appsmenu-biglinux  contents/tools/recent-activity
+#   biglinux-settings         usability/recentActivity.sh
+# so the menu and the settings switch can never disagree about what
+# "enabled" means.
+#
+# ---------------------------------------------------------------------------
+# What actually gates the feature on Plasma 6.7 / KF 6.29 (verified on a live
+# BigLinux VM against the kactivitymanagerd v6.7.4 sources, see
+# docs/recent-files-02-root-cause.md):
+#
+# Subsystem A — activity tracking.  Feeds every Kicker RecentUsageModel
+# (Recent Apps / Files / Folders, Frequently Used, Places > History) *and*
+# Dolphin's "Recent Files" / "Recent Locations", because both go through
+# libPlasmaActivitiesStats.  kactivitymanagerd's StatsPlugin::acceptedEvent()
+# drops an event when ANY of these is true:
+#
+#     what-to-remember == 2            ("do not remember")
+#     off-the-record-activities contains the CURRENT activity
+#     the URI matches url-filters      (hidden files, /tmp/*, ... — by design)
+#
+#   All three live in kactivitymanagerd-pluginsrc, group
+#   [Plugin-org.kde.ActivityManager.Resources.Scoring].
+#
+#   NOTE: the "enabled" key in that group is a NO-OP on Plasma 6 —
+#   Application::loadPlugins() loads every plugin unconditionally and
+#   StatsPlugin never reads it.  We still write it, because older BigLinux
+#   releases and System Settings look at it, and we still honour a literal
+#   "false" so that the menu and the settings switch agree with what the user
+#   last asked for.  It is NOT what makes the feature work.
+#
+# Subsystem B — recent documents.  kdeglobals [RecentDocuments] UseRecent
+# (default true) drives KRecentDocument -> ~/.local/share/recently-used.xbel,
+# the XDG recent list used by file dialogs and GTK apps.
+#
+# NOT involved, despite appearing in older BigLinux scripts:
+#   * Baloo — file-content indexing/search.  Nothing in the recent-files path
+#     links against it (verified with ldd on the kicker plugin, the
+#     recentlyused KIO worker and libPlasmaActivitiesStats).
+#   * kioslaverc [recentlyused] FilesEnabled / LocationsEnabled / MaxItems —
+#     no consumer exists in KF 6.29.  Checking them made the settings switch
+#     read OFF forever on a default install, where the file does not exist.
+# ---------------------------------------------------------------------------
+#
+# Usage:
+#   recent-activity status     key=value lines describing the real state
+#   recent-activity check      "true" / "false"  (state of the whole feature)
+#   recent-activity enable     turn it on, verify, exit non-zero on failure
+#   recent-activity disable    turn it off, verify, exit non-zero on failure
+#   recent-activity diagnose   human-readable report, for bug reports
+#
+# Turning the feature on or off never deletes the user's history: the scoring
+# database and recently-used.xbel are left untouched.
+
+set -uo pipefail
+
+readonly PLUGIN_FILE="kactivitymanagerd-pluginsrc"
+readonly PLUGIN_GROUP="Plugin-org.kde.ActivityManager.Resources.Scoring"
+readonly PLACES_FILE="${XDG_DATA_HOME:-$HOME/.local/share}/user-places.xbel"
+
+# --- low level config access ------------------------------------------------
+
+kread() { # file group key default
+    kreadconfig6 --file "$1" --group "$2" --key "$3" --default "$4" 2>/dev/null
+}
+
+# Always --notify: kactivitymanagerd holds a KConfigWatcher on
+# kactivitymanagerd-pluginsrc and reloads the scoring configuration the moment
+# the change is announced on D-Bus.  That is what makes turning the feature on
+# take effect immediately, with no service restart and no logout.
+kwrite() { # file group key value
+    kwriteconfig6 --notify --file "$1" --group "$2" --key "$3" "$4" 2>/dev/null
+}
+
+kdelete() { # file group key
+    kwriteconfig6 --notify --file "$1" --group "$2" --key "$3" --delete 2>/dev/null
+}
+
+# The UUID of the activity the user is in right now.  Printed empty when
+# kactivitymanagerd is not reachable.  dbus-send is used rather than qdbus6
+# because it ships with dbus itself, and only the Activities interface is
+# touched: calling org.kde.ActivityManager.Features.IsFeatureOperational with
+# a plugin name makes the daemon exit (reproduced on 6.7.4).
+current_activity() {
+    dbus-send --session --print-reply=literal --reply-timeout=2000 \
+        --dest=org.kde.ActivityManager \
+        /ActivityManager/Activities \
+        org.kde.ActivityManager.Activities.CurrentActivity 2>/dev/null |
+        tr -d '[:space:]'
+}
+
+# --- state ------------------------------------------------------------------
+
+# Is $1 one of the comma-separated entries in $2?
+list_contains() { # needle list
+    local needle=$1 list=$2 item
+    [ -n "$needle" ] || return 1
+    local IFS=','
+    for item in $list; do
+        [ "$item" = "$needle" ] && return 0
+    done
+    return 1
+}
+
+# Echoes key=value lines. The authoritative description of the current state.
+status() {
+    local enabled remember otr activity blocked_by_default use_recent
+    enabled=$(kread "$PLUGIN_FILE" "$PLUGIN_GROUP" enabled true)
+    remember=$(kread "$PLUGIN_FILE" "$PLUGIN_GROUP" what-to-remember 0)
+    otr=$(kread "$PLUGIN_FILE" "$PLUGIN_GROUP" off-the-record-activities "")
+    blocked_by_default=$(kread "$PLUGIN_FILE" "$PLUGIN_GROUP" blocked-by-default false)
+    use_recent=$(kread kdeglobals RecentDocuments UseRecent true)
+    activity=$(current_activity)
+
+    # Normalise: kreadconfig6 echoes an empty line for a key it cannot find
+    # even with --default, on some versions.
+    [ -n "$enabled" ]  || enabled=true
+    [ -n "$remember" ] || remember=0
+    [ -n "$use_recent" ] || use_recent=true
+
+    local private=false
+    if [ -n "$activity" ]; then
+        list_contains "$activity" "$otr" && private=true
+    elif [ -n "$otr" ]; then
+        # The daemon is unreachable so we cannot tell which activity is
+        # current; a non-empty list means at least one is private. Report
+        # unknown rather than claiming the feature is fine.
+        private=unknown
+    fi
+
+    # tracking: on | off | limited | unknown, plus the reason it is not "on".
+    local tracking=on reason=ok
+    if [ "${enabled,,}" = "false" ]; then
+        tracking=off; reason=plugin-disabled
+    elif [ "$remember" = "2" ]; then
+        tracking=off; reason=do-not-remember
+    elif [ "$private" = "true" ]; then
+        tracking=off; reason=off-the-record
+    elif [ "$private" = "unknown" ]; then
+        tracking=unknown; reason=daemon-unreachable
+    elif [ "$remember" = "1" ]; then
+        tracking=limited; reason=specific-applications
+    fi
+
+    local documents=on
+    [ "${use_recent,,}" = "false" ] && documents=off
+
+    # The feature as a whole. "limited" still records, so it counts as on.
+    local overall=false
+    if { [ "$tracking" = "on" ] || [ "$tracking" = "limited" ]; } && [ "$documents" = "on" ]; then
+        overall=true
+    fi
+
+    cat <<EOF
+tracking=$tracking
+reason=$reason
+documents=$documents
+enabled=$overall
+activity=$activity
+off-the-record=$otr
+what-to-remember=$remember
+blocked-by-default=$blocked_by_default
+use-recent=$use_recent
+EOF
+}
+
+check() {
+    local value
+    value=$(status | sed -n 's/^enabled=//p')
+    [ "$value" = "true" ] && echo true || echo false
+}
+
+# --- transitions ------------------------------------------------------------
+
+enable_feature() {
+    local activity otr remember new_otr item
+    activity=$(current_activity)
+    otr=$(kread "$PLUGIN_FILE" "$PLUGIN_GROUP" off-the-record-activities "")
+    remember=$(kread "$PLUGIN_FILE" "$PLUGIN_GROUP" what-to-remember 0)
+
+    # 1. Take the CURRENT activity out of the private list, leaving the user's
+    #    choice for any other activity alone.  This is the one thing the old
+    #    code never did, and the reason the feature stayed dead.
+    if [ -n "$activity" ] && list_contains "$activity" "$otr"; then
+        new_otr=""
+        local IFS=','
+        for item in $otr; do
+            [ "$item" = "$activity" ] && continue
+            [ -n "$item" ] || continue
+            new_otr="${new_otr:+$new_otr,}$item"
+        done
+        unset IFS
+        if [ -n "$new_otr" ]; then
+            kwrite "$PLUGIN_FILE" "$PLUGIN_GROUP" off-the-record-activities "$new_otr"
+        else
+            kdelete "$PLUGIN_FILE" "$PLUGIN_GROUP" off-the-record-activities
+        fi
+    fi
+
+    # 2. "Do not remember" -> "remember everything".  A value of 1 ("only the
+    #    listed applications") is a deliberate user choice and is preserved.
+    if [ "$remember" = "2" ] || [ -z "$remember" ]; then
+        kwrite "$PLUGIN_FILE" "$PLUGIN_GROUP" what-to-remember 0
+    fi
+
+    # 3. Legacy master switch: a no-op for the daemon, but both BigLinux tools
+    #    and System Settings read it, so keep it truthful.
+    kwrite "$PLUGIN_FILE" "$PLUGIN_GROUP" enabled true
+
+    # 4. XDG recent documents (Dolphin's recent files, file dialogs).
+    kwrite kdeglobals RecentDocuments UseRecent true
+
+    # 5. Un-hide the "Recent" group in the Places panel, but only if it is
+    #    actually hidden — never rewrite the user's places file for nothing.
+    if [ -f "$PLACES_FILE" ] &&
+       grep -q '<GroupState-RecentlySaved-IsHidden>true</GroupState-RecentlySaved-IsHidden>' "$PLACES_FILE"; then
+        sed -i 's|<GroupState-RecentlySaved-IsHidden>true</GroupState-RecentlySaved-IsHidden>|<GroupState-RecentlySaved-IsHidden>false</GroupState-RecentlySaved-IsHidden>|g' \
+            "$PLACES_FILE"
+    fi
+
+    verify_is on
+}
+
+disable_feature() {
+    # what-to-remember=2 is the switch the daemon actually honours.
+    kwrite "$PLUGIN_FILE" "$PLUGIN_GROUP" what-to-remember 2
+    kwrite "$PLUGIN_FILE" "$PLUGIN_GROUP" enabled false
+    kwrite kdeglobals RecentDocuments UseRecent false
+
+    # Deliberately NOT done here, unlike the old implementation:
+    #   * deleting ~/.local/share/kactivitymanagerd/resources
+    #   * truncating recently-used.xbel
+    #   * killall dolphin / kactivitymanagerd / kioworker / kiod6
+    #   * disabling Baloo
+    # Turning the switch off must not destroy history the user may want back,
+    # and none of it is needed for the setting to take effect.  Clearing the
+    # history is a separate, explicit action (System Settings > Recent Files).
+    verify_is off
+}
+
+# Re-read the state and confirm it is what we asked for. Never report success
+# because a command exited 0.
+verify_is() { # on|off
+    local want=$1 out tracking documents
+    out=$(status)
+    tracking=$(printf '%s\n' "$out" | sed -n 's/^tracking=//p')
+    documents=$(printf '%s\n' "$out" | sed -n 's/^documents=//p')
+
+    if [ "$want" = "on" ]; then
+        if { [ "$tracking" = "on" ] || [ "$tracking" = "limited" ]; } && [ "$documents" = "on" ]; then
+            printf '%s\n' "$out"; return 0
+        fi
+    else
+        if [ "$tracking" = "off" ] && [ "$documents" = "off" ]; then
+            printf '%s\n' "$out"; return 0
+        fi
+    fi
+    printf '%s\n' "$out"
+    return 1
+}
+
+diagnose() {
+    echo "== recent files & locations =="
+    status | sed 's/^/  /'
+    echo
+    echo "== services =="
+    printf '  kactivitymanagerd: %s\n' \
+        "$(systemctl --user is-active plasma-kactivitymanagerd.service 2>/dev/null || echo unknown)"
+    echo
+    echo "== history size (not required for the switch, shown for support) =="
+    local db="${XDG_DATA_HOME:-$HOME/.local/share}/kactivitymanagerd/resources/database"
+    if [ -r "$db" ] && command -v sqlite3 >/dev/null 2>&1; then
+        printf '  ResourceEvent rows: %s\n' \
+            "$(sqlite3 "$db" 'SELECT COUNT(*) FROM ResourceEvent;' 2>/dev/null || echo '?')"
+    else
+        echo "  scoring database: $db (unreadable or sqlite3 missing)"
+    fi
+    local xbel="${XDG_DATA_HOME:-$HOME/.local/share}/recently-used.xbel"
+    if [ -r "$xbel" ]; then
+        printf '  recently-used.xbel entries: %s\n' "$(grep -c '<bookmark ' "$xbel")"
+    fi
+}
+
+case "${1:-status}" in
+    status)   status ;;
+    check)    check ;;
+    enable)   enable_feature ;;
+    disable)  disable_feature ;;
+    diagnose) diagnose ;;
+    *)
+        printf 'usage: %s {status|check|enable|disable|diagnose}\n' "${0##*/}" >&2
+        exit 2
+        ;;
+esac
