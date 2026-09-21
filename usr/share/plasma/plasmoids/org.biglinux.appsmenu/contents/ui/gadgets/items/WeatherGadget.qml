@@ -260,9 +260,13 @@ Item {
                     id: bigIcon
                     anchors.fill: parent
                     source: weather.wx ? weather.wx.icon : "weather-none-available"
-                    // gentle float animation
+                    /*  A floating icon is decoration, and a looping animation keeps
+                        the whole popup repainting at vsync for as long as the menu is
+                        open. It now runs only under the pointer, where it is noticed,
+                        and rests at the centre otherwise.  */
                     SequentialAnimation on anchors.verticalCenterOffset {
-                        running: weather.host.active && Kirigami.Units.longDuration > 0
+                        running: weather.host.active && weather.host.hovered && Kirigami.Units.longDuration > 0
+                        onRunningChanged: if (!running) bigIcon.anchors.verticalCenterOffset = 0
                         loops: Animation.Infinite
                         NumberAnimation { to: -3; duration: 1800; easing.type: Easing.InOutSine }
                         NumberAnimation { to: 3; duration: 1800; easing.type: Easing.InOutSine }

@@ -7,7 +7,8 @@
     Responsibilities:
       • visual frame (rounded, shadowed, accent-tinted, hover lift)
       • title bar (drag handle in normal mode), edit-mode badges
-        (remove, size, settings), iOS-like wiggle while editing
+        (remove, size, settings) and a static edit affordance — accent
+        outline plus a slight shrink — instead of a looping wiggle
       • drag & drop: press-and-hold anywhere (or just drag the title bar /
         the whole card in edit mode); reports to GadgetGrid which re-packs
         the others live
@@ -134,20 +135,20 @@ Item {
     Behavior on width { enabled: Kirigami.Units.longDuration > 0; NumberAnimation { duration: Kirigami.Units.longDuration; easing.type: Easing.OutCubic } }
     Behavior on height { enabled: Kirigami.Units.longDuration > 0; NumberAnimation { duration: Kirigami.Units.longDuration; easing.type: Easing.OutCubic } }
 
-    scale: dragging ? 1.04 : 1.0
+    /*  Edit mode is shown statically: the card shrinks a little and gets an
+        accent outline, and the badges appear. It used to wiggle with an
+        infinite rotation animation per card, and that was the source of the
+        "menu freezes in Edit" complaint. Measured on the lab VM with 22
+        cards: entering Edit took plasmashell from ~4 % to ~230 % CPU with a
+        constant ~75 fps repaint at ~12 ms a frame. Rotation is also the worst
+        possible transform here — the card's content area is clipped, and a
+        rotated clip cannot use the cheap scissor path, so every card fell
+        back to stencil clipping every frame. A scale keeps the axes aligned
+        and animates once, on the way in and out, then costs nothing.  */
+    scale: dragging ? 1.04 : (editing ? 0.965 : 1.0)
     opacity: dragging ? 0.92 : 1.0
     Behavior on opacity { NumberAnimation { duration: Kirigami.Units.shortDuration } }
     Behavior on scale { NumberAnimation { duration: Kirigami.Units.shortDuration; easing.type: Easing.OutCubic } }
-
-    // iOS-like wiggle in edit mode
-    SequentialAnimation on rotation {
-        id: wiggle
-        running: host.editing && !host.dragging && Kirigami.Units.longDuration > 0
-        loops: Animation.Infinite
-        NumberAnimation { to: 0.9; duration: 130; easing.type: Easing.InOutSine }
-        NumberAnimation { to: -0.9; duration: 130; easing.type: Easing.InOutSine }
-        onStopped: host.rotation = 0
-    }
 
     onCfgJsonChanged: {
         try { cfgData = cfgJson && cfgJson.length ? JSON.parse(cfgJson) : {} } catch (e) { cfgData = {} }
@@ -169,8 +170,10 @@ Item {
         color: Kirigami.Theme.backgroundColor
         Kirigami.Theme.colorSet: Kirigami.Theme.View
         Kirigami.Theme.inherit: false
-        border.width: 1
-        border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, host.hovered ? 0.16 : 0.09)
+        border.width: host.editing ? 2 : 1
+        border.color: host.editing
+            ? Qt.rgba(host.accent.r, host.accent.g, host.accent.b, host.hovered ? 0.9 : 0.55)
+            : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, host.hovered ? 0.16 : 0.09)
         shadow.size: host.dragging ? 28 : (host.hovered ? 18 : 10)
         shadow.yOffset: host.dragging ? 8 : (host.hovered ? 4 : 2)
         shadow.color: Qt.rgba(0, 0, 0, host.dragging ? 0.38 : 0.22)

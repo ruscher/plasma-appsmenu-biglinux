@@ -333,16 +333,24 @@ Item {
                     }
                     Team { team: row.modelData.away; alignRight: true }
                 }
-                Rectangle {
+                /*  A live match is marked with a dot and the word, not a pulse:
+                    the blink forced a full repaint every frame for every live
+                    row, and colour alone is not a signal everybody can read.  */
+                Row {
                     visible: row.modelData.state === "in"
-                    width: 6; height: 6; radius: 3
-                    color: sports.host.accent
+                    spacing: 3
                     anchors { left: parent.left; top: parent.top; margins: 3 }
-                    SequentialAnimation on opacity {
-                        running: row.modelData.state === "in" && sports.host.active
-                        loops: Animation.Infinite
-                        NumberAnimation { to: 0.2; duration: 700 }
-                        NumberAnimation { to: 1; duration: 700 }
+                    Rectangle {
+                        width: 6; height: 6; radius: 3
+                        color: sports.host.accent
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+                    PC3.Label {
+                        text: i18nc("@label marks a match in progress", "LIVE")
+                        font.pointSize: Kirigami.Theme.smallFont.pointSize * 0.7
+                        font.weight: Font.Bold
+                        color: sports.host.accent
+                        anchors.verticalCenter: parent.verticalCenter
                     }
                 }
                 // minute (live) or date (result) centred under the score pill
