@@ -114,6 +114,32 @@ PlasmoidItem {
         Component.onCompleted: shownItems = 3 // Folders
     }
 
+    /* Frequently used, split by type, for Places.
+       ordering = 1 is RecentUsageModel::Popular, which upstream maps to the
+       activity manager's HighScoredFirst — KDE's own frequency score, already
+       scoped to Activity::current(). Nothing here re-ranks anything.
+       Home keeps using frequentUsageModel (apps+docs combined) for its own
+       compact section; these are separate so Places can show balanced
+       per-type lists instead of one list where a single type crowds out the
+       others under the shared Limit(30). */
+    readonly property Kicker.RecentUsageModel frequentAppsModel: Kicker.RecentUsageModel {
+        favoritesModel: rootModel.favoritesModel
+        ordering: 1 // Popular
+        Component.onCompleted: shownItems = 1 // Applications
+    }
+
+    readonly property Kicker.RecentUsageModel frequentDocsModel: Kicker.RecentUsageModel {
+        favoritesModel: rootModel.favoritesModel
+        ordering: 1 // Popular
+        Component.onCompleted: shownItems = 2 // Documents
+    }
+
+    readonly property Kicker.RecentUsageModel frequentFoldersModel: Kicker.RecentUsageModel {
+        favoritesModel: rootModel.favoritesModel
+        ordering: 1 // Popular
+        Component.onCompleted: shownItems = 3 // Folders
+    }
+
     /* Installable-software suggestions for the search page.
        Lives here rather than inside SearchResultsPage so that the one-off
        "is Pamac installed?" probe runs once per plasmoid instead of once per
