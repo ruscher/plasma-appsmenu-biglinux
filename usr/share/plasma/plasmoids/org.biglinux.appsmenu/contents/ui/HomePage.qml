@@ -34,6 +34,15 @@ EmptyPage {
         || Plasmoid.configuration.showRecentFolders
         || Plasmoid.configuration.showFrequentSection
 
+    // How much history the recent models actually hold. Zero with the feature
+    // switched on means "recording, but nothing recorded yet" — a friendly
+    // empty state rather than a blank page.
+    readonly property int recentHistoryCount:
+        (root.recentModel ? root.recentModel.count : 0)
+        + (root.recentDocsModel ? root.recentDocsModel.count : 0)
+        + (root.recentFoldersModel ? root.recentFoldersModel.count : 0)
+        + (root.frequentModel ? root.frequentModel.count : 0)
+
     T.StackView.onActivated: {
         kickoff.sideBar = null
         kickoff.contentArea = root
@@ -161,14 +170,41 @@ EmptyPage {
                 Item {
                     id: enableRecentBox
 
+                    // Which of the five states this box is showing, or
+                    // "hidden" when the history is on and already has
+                    // entries and there is nothing to say.
+                    readonly property string boxState: {
+                        if (!root.wantsRecentSections) {
+                            return "hidden"
+                        }
+                        if (recentActivity.busy) {
+                            return "enabling"
+                        }
+                        if (recentActivity.trackingState === "error") {
+                            return "error"
+                        }
+                        if (recentActivity.trackingState === "off") {
+                            return "disabled"
+                        }
+                        // Recording, but nothing has been recorded yet: say so
+                        // instead of leaving the page mysteriously blank.
+                        if (recentActivity.trackingState !== "unknown" && root.recentHistoryCount === 0) {
+                            return "empty"
+                        }
+                        return "hidden"
+                    }
+
+                    readonly property bool actionable: boxState === "disabled" || boxState === "error"
+
                     Layout.fillWidth: true
                     Layout.leftMargin: Kirigami.Units.mediumSpacing
                     Layout.rightMargin: Kirigami.Units.mediumSpacing
                     Layout.preferredHeight: enableRecentColumn.implicitHeight + Kirigami.Units.gridUnit * 2
-                    visible: !recentActivity.tracking && root.wantsRecentSections
+                    visible: boxState !== "hidden"
 
                     Accessible.role: Accessible.Pane
                     Accessible.name: enableRecentTitle.text
+                    Accessible.description: enableRecentBody.text
 
                     Rectangle {
                         anchors.fill: parent
@@ -180,7 +216,9 @@ EmptyPage {
                             0.35
                         )
                         border.width: 1
-                        border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.06)
+                        border.color: enableRecentBox.boxState === "error"
+                            ? Qt.rgba(Kirigami.Theme.negativeTextColor.r, Kirigami.Theme.negativeTextColor.g, Kirigami.Theme.negativeTextColor.b, 0.5)
+                            : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.06)
                     }
 
                     ColumnLayout {
@@ -191,16 +229,36 @@ EmptyPage {
                         spacing: Kirigami.Units.smallSpacing
 
                         Kirigami.Icon {
-                            source: "document-open-recent"
+                            source: enableRecentBox.boxState === "error" ? "dialog-error" : "document-open-recent"
                             Layout.alignment: Qt.AlignHCenter
                             Layout.preferredWidth: Kirigami.Units.iconSizes.large
                             Layout.preferredHeight: Kirigami.Units.iconSizes.large
                             opacity: 0.8
+                            visible: enableRecentBox.boxState !== "enabling"
+                        }
+
+                        PC3.BusyIndicator {
+                            Layout.alignment: Qt.AlignHCenter
+                            Layout.preferredWidth: Kirigami.Units.iconSizes.large
+                            Layout.preferredHeight: Kirigami.Units.iconSizes.large
+                            running: enableRecentBox.boxState === "enabling"
+                            visible: running
                         }
 
                         PC3.Label {
                             id: enableRecentTitle
-                            text: i18n("Recent files and locations are turned off")
+                            text: {
+                                switch (enableRecentBox.boxState) {
+                                case "enabling":
+                                    return i18n("Turning on recent files…")
+                                case "error":
+                                    return i18n("Could not turn on recent files")
+                                case "empty":
+                                    return i18n("No recent files yet")
+                                default:
+                                    return i18n("Recent files and locations are turned off")
+                                }
+                            }
                             font.weight: Font.DemiBold
                             horizontalAlignment: Text.AlignHCenter
                             wrapMode: Text.Wrap
@@ -209,7 +267,19 @@ EmptyPage {
                         }
 
                         PC3.Label {
-                            text: i18n("KDE is not recording the applications and files you open, so your recent apps, files and folders stop appearing here. Turn it on to see them again.")
+                            id: enableRecentBody
+                            text: {
+                                switch (enableRecentBox.boxState) {
+                                case "enabling":
+                                    return i18n("Applying the change…")
+                                case "error":
+                                    return i18n("The setting could not be changed. Try again, or open the settings to change it by hand.")
+                                case "empty":
+                                    return i18n("Recent files is on. Applications, files and folders you open from now on will appear here.")
+                                default:
+                                    return i18n("KDE is not recording the applications and files you open, so your recent apps, files and folders stop appearing here. Turn it on to see them again.")
+                                }
+                            }
                             font: Kirigami.Theme.smallFont
                             color: Kirigami.Theme.disabledTextColor
                             horizontalAlignment: Text.AlignHCenter
@@ -221,8 +291,11 @@ EmptyPage {
                         PC3.Button {
                             Layout.alignment: Qt.AlignHCenter
                             icon.name: "document-open-recent"
-                            text: recentActivity.busy ? i18n("Turning on…") : i18n("Turn on recent files")
-                            enabled: !recentActivity.busy
+                            text: enableRecentBox.boxState === "error"
+                                ? i18n("Try again")
+                                : i18n("Turn on recent files")
+                            visible: enableRecentBox.actionable
+                            activeFocusOnTab: visible
 
                             Accessible.role: Accessible.Button
                             Accessible.name: text
@@ -235,6 +308,8 @@ EmptyPage {
                             Layout.alignment: Qt.AlignHCenter
                             flat: true
                             text: i18n("Open settings…")
+                            visible: enableRecentBox.actionable
+                            activeFocusOnTab: visible
 
                             Accessible.role: Accessible.Button
                             Accessible.name: i18n("Open the Recent Files settings")
