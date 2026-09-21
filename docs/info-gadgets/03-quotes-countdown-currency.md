@@ -1,3 +1,67 @@
+# 7. Quote of the Day — original content, one honest provider
+
+## Local collection
+
+The 24 entries that were here were famous quotations in English, hard-coded as
+plain strings: not translatable, and not ours to ship. They are replaced by
+**40 messages written for this project**, each wrapped in `i18nc` so they are
+translated with the rest of the interface, and carrying no third-party licence
+at all. The themes are the ones the brief asked for — motivation, productivity,
+learning, perseverance, creativity, free software and technology:
+
+> A problem written down is already half understood.
+> The code you can delete is worth more than the code you can add.
+> Software you are allowed to study is software you can trust.
+> An error is not a failure; it is information arriving on time.
+
+They have no author, so the attribution line and the "copy" action now omit the
+dash instead of printing a dangling one.
+
+The message of the day is chosen from the date, so it is stable all day and the
+same on every machine sharing that date — a quote *of the day* rather than a
+random one per launch.
+
+## Online: one provider, because only one qualifies
+
+The brief allows a choice of sources **only if** more than one stable, properly
+licensed public API exists. The obvious candidates were tested rather than
+assumed:
+
+| provider | result |
+|---|---|
+| `zenquotes.io/api/today` | **HTTP 200** — free, no account |
+| `api.quotable.io/random` | does not resolve |
+| `api.forismatic.com` | does not resolve |
+| `quotes.rest/qod` | HTTP 401 — needs an API key, which this project does not ship |
+
+Only ZenQuotes qualifies, so there is no provider picker: adding dead or
+key-gated services to lengthen a list is exactly what the brief warned against.
+
+## Fallback
+
+The setting is now a choice between **Local collection only** (default) and
+**Online, falling back to the local collection**.
+
+The fallback is structural rather than handled: a local message is put on
+screen before any request is made, and an online reply only ever *replaces* it.
+A failure clears nothing and shows no error — it just raises the offline badge,
+so an offline machine simply keeps reading local messages. Switching back to
+local restores a local message immediately; it used to leave the last online
+quote up forever.
+
+### Test (live, three configurations)
+
+| case | result |
+|---|---|
+| Local only | `isLocalMessage: true`, 40 messages, no author, `offline: false` |
+| Online, reachable | quote fetched from ZenQuotes (`Kahlil Gibran`), `isLocalMessage: false` |
+| Online, provider unreachable | `offline: true`, `loading: false`, **`isLocalMessage: true`** — the card keeps its local message |
+
+The third case was produced by pointing the deployed copy at an unresolvable
+host; the copy was restored afterwards.
+
+---
+
 # 8. Countdown — "Add event" in line, and nothing thrown away silently
 
 ## Layout
