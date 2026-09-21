@@ -134,6 +134,10 @@ Item {
         // Wide layout: horizontal cards with pictures
         ListView {
             id: cardsView
+            QQC2.ScrollBar.horizontal: PC3.ScrollBar {
+                policy: cardsView.contentWidth > cardsView.width ? QQC2.ScrollBar.AsNeeded
+                                                                 : QQC2.ScrollBar.AlwaysOff
+            }
             visible: rss.host.wide && !rss.host.tall
             Layout.fillWidth: true
             Layout.fillHeight: true
@@ -198,6 +202,10 @@ Item {
         // Compact / tall layout: rows with small thumbnails
         ListView {
             id: rowsView
+            QQC2.ScrollBar.vertical: PC3.ScrollBar {
+                policy: rowsView.contentHeight > rowsView.height ? QQC2.ScrollBar.AsNeeded
+                                                                 : QQC2.ScrollBar.AlwaysOff
+            }
             visible: !cardsView.visible
             Layout.fillWidth: true
             Layout.fillHeight: true
@@ -277,7 +285,7 @@ Item {
                     QQC2.TextField {
                         Layout.fillWidth: true
                         text: modelData.url
-                        placeholderText: "https://…/feed.xml"
+                        placeholderText: i18nc("@info:placeholder example feed address", "https://…/feed.xml")
                         onEditingFinished: { const l = se.list.map(f => Object.assign({}, f)); l[index].url = text.trim(); se.save(l) }
                     }
                     PC3.ToolButton {
@@ -291,7 +299,7 @@ Item {
             RowLayout {
                 Layout.fillWidth: true
                 QQC2.TextField { id: newName; placeholderText: i18n("Name"); Layout.preferredWidth: Kirigami.Units.gridUnit * 7 }
-                QQC2.TextField { id: newUrl; placeholderText: "https://…"; Layout.fillWidth: true }
+                QQC2.TextField { id: newUrl; placeholderText: i18nc("@info:placeholder example feed address", "https://…"); Layout.fillWidth: true }
                 PC3.Button {
                     icon.name: "list-add"; text: i18n("Add")
                     enabled: newUrl.text.trim().length > 8

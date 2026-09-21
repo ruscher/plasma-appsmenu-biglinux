@@ -14,6 +14,7 @@ import QtQuick.Layouts 1.15
 import QtQuick.Controls 2.15 as QQC2
 import org.kde.plasma.components 3.0 as PC3
 import org.kde.kirigami 2.20 as Kirigami
+import ".." as G
 import "../lib/GadgetNet.js" as Net
 import org.kde.notification as KNotification
 import "../lib/SportsTheSportsDB.js" as Provider
@@ -187,26 +188,19 @@ Item {
         anchors.fill: parent
         spacing: Kirigami.Units.smallSpacing
 
-        // League switcher
-        RowLayout {
+        /*  Every followed league stays reachable. This was
+            `leagues.slice(0, wide ? 4 : 3)`, so following five leagues hid two
+            of them with no way to get at them — the same defect the news
+            sources had.  */
+        G.GadgetTabStrip {
             Layout.fillWidth: true
             visible: sports.leagues.length > 1
-            spacing: 2
-            Repeater {
-                model: sports.leagues.slice(0, sports.host.wide ? 4 : 3)
-                delegate: PC3.ToolButton {
-                    required property string modelData
-                    required property int index
-                    readonly property var lg: Provider.leagueById(modelData)
-                    text: lg.icon + " " + (sports.host.wide ? lg.name : lg.name.split(" ")[0])
-                    checkable: true
-                    checked: index === sports.current
-                    font.pointSize: Kirigami.Theme.smallFont.pointSize
-                    implicitHeight: Kirigami.Units.iconSizes.smallMedium
-                    onClicked: sports.host.setCfg("current", index)
-                }
-            }
-            Item { Layout.fillWidth: true }
+            model: sports.leagues.map(id => {
+                const lg = Provider.leagueById(id)
+                return { name: lg.icon + " " + (sports.host.wide ? lg.name : lg.name.split(" ")[0]) }
+            })
+            currentIndex: sports.current
+            onActivated: index => sports.host.setCfg("current", index)
         }
 
         ListView {

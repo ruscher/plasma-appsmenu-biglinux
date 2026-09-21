@@ -163,12 +163,32 @@ Item {
             }
         }
 
-        // Finished events waiting to be dismissed
-        Repeater {
-            model: cd.events.filter(e => e.fired).slice(0, cd.host.compact ? 1 : 3)
+        /*  Finished events waiting to be dismissed. Every one of them: these
+            rows are how an event is dismissed, so hiding any leaves it stuck
+            for good. The list is bounded and scrolls rather than pushing the
+            countdown itself off the card.  */
+        ListView {
+            id: firedList
+            readonly property var fired: cd.events.filter(e => e.fired)
+
+            Layout.fillWidth: true
+            Layout.preferredHeight: Math.min(contentHeight,
+                                             Kirigami.Units.gridUnit * (cd.host.compact ? 2.2 : 4))
+            visible: fired.length > 0
+            model: fired
+            clip: true
+            spacing: 0
+            boundsBehavior: Flickable.StopAtBounds
+            flickableDirection: Flickable.VerticalFlick
+
+            QQC2.ScrollBar.vertical: PC3.ScrollBar {
+                policy: firedList.contentHeight > firedList.height ? QQC2.ScrollBar.AsNeeded
+                                                                   : QQC2.ScrollBar.AlwaysOff
+            }
+
             delegate: RowLayout {
                 required property var modelData
-                Layout.fillWidth: true
+                width: firedList.width
                 spacing: Kirigami.Units.smallSpacing
                 Kirigami.Icon { source: "dialog-ok"; color: cd.host.accent; Layout.preferredWidth: Kirigami.Units.iconSizes.small; Layout.preferredHeight: Kirigami.Units.iconSizes.small }
                 PC3.Label { text: i18n("%1 — done", modelData.name); font.pointSize: Kirigami.Theme.smallFont.pointSize; elide: Text.ElideRight; Layout.fillWidth: true }

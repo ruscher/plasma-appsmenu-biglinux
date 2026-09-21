@@ -207,7 +207,7 @@ Item {
                 font.pointSize: Kirigami.Theme.defaultFont.pointSize * 2.2
                 font.weight: Font.Light
             }
-            PC3.Label { text: "W"; font.pointSize: Kirigami.Theme.defaultFont.pointSize * 1.1; opacity: 0.7; Layout.alignment: Qt.AlignBottom; Layout.bottomMargin: 6 }
+            PC3.Label { text: i18nc("@label watt, the unit of power", "W"); font.pointSize: Kirigami.Theme.defaultFont.pointSize * 1.1; opacity: 0.7; Layout.alignment: Qt.AlignBottom; Layout.bottomMargin: 6 }
             Item { Layout.fillWidth: true }
         }
         PC3.Label {

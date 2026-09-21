@@ -51,8 +51,12 @@ Item {
     }
 
     /*  The UDIs actually shown. The header counts this list and the view
-        renders this list, so the two cannot drift apart again.  */
-    property var volumes: []
+        renders this list, so the two cannot drift apart again.
+
+        Split into a settable half with no initialiser and a read-only half,
+        so rebuilding does not overwrite a binding — see 00-audit.  */
+    property var volumesData
+    readonly property var volumes: volumesData !== undefined ? volumesData : []
 
     function isStorage(udi) {
         const d = solid.data[udi]
@@ -154,7 +158,7 @@ Item {
         idle.sort((a, b) => label(a).localeCompare(label(b)))
         const next = mounted.concat(idle)
         if (next.length !== volumes.length || next.some((v, i) => v !== volumes[i])) {
-            volumes = next
+            volumesData = next
         }
     }
 
