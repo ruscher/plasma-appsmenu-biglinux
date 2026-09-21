@@ -47,9 +47,21 @@ PlasmaExtras.PlasmoidHeading {
     property Item configureButton: null
     property Item avatar: avatar
 
-    // True while the user is searching on purpose. Drives the expansion.
-    readonly property bool searchActive: searchField.text.length > 0
-        || (searchField.activeFocus && searchField.focusReason !== Qt.OtherFocusReason)
+    /* True while the user is searching on purpose. Drives the expansion.
+
+       Deliberately NOT inferred from searchField.focusReason. The field is
+       focused as soon as the menu opens so the user can type straight away,
+       and the reason Qt then reports for that focus depends on how the popup's
+       focus chain resolves rather than on anything the user did — measured as
+       BacktabFocusReason on X11 even though the field is focused
+       programmatically with OtherFocusReason, which left the header stuck in
+       its expanded state with the avatar hidden.
+
+       Intent is therefore tracked explicitly: typing expands it (text is the
+       intent), and so does tapping the field or tabbing into it from the
+       avatar. Same behaviour on X11 and Wayland, no focus-reason guesswork. */
+    property bool searchEngaged: false
+    readonly property bool searchActive: searchField.text.length > 0 || root.searchEngaged
 
     contentHeight: headerRow.implicitHeight
 
@@ -126,6 +138,7 @@ PlasmaExtras.PlasmoidHeading {
             }
 
             Keys.onTabPressed: event => {
+                root.searchEngaged = true
                 searchField.forceActiveFocus(Qt.TabFocusReason)
             }
             Keys.onBacktabPressed: event => {
@@ -192,6 +205,14 @@ PlasmaExtras.PlasmoidHeading {
             Accessible.description: i18n("Search applications, files, settings and more. Also does calculations and unit conversions.")
             Accessible.role: Accessible.EditableText
 
+            /* DragThreshold so this never takes the grab away from text
+               selection; it only records that the user reached for the field. */
+            TapHandler {
+                acceptedButtons: Qt.LeftButton
+                gesturePolicy: TapHandler.DragThreshold
+                onTapped: root.searchEngaged = true
+            }
+
             Binding {
                 target: kickoff
                 property: "searchField"
@@ -204,8 +225,9 @@ PlasmaExtras.PlasmoidHeading {
                 function onExpandedChanged() {
                     if (kickoff.expanded) {
                         searchField.clear()
-                        // OtherFocusReason on purpose: ready to type, but the
-                        // header stays in its resting state (see searchActive).
+                        root.searchEngaged = false
+                        // Focused so the user can type immediately; the header
+                        // still rests until they actually engage (searchActive).
                         searchField.forceActiveFocus(Qt.OtherFocusReason)
                     }
                 }
