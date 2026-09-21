@@ -427,8 +427,16 @@ EmptyPage {
         }
     }
 
+    /* parent: root is required, not decorative. EmptyPage is a T.Page, so an
+       item declared in its body goes into contentData and the contentItem
+       RowLayout takes ownership of its geometry — which made QML warn
+       "anchors on an item that is managed by a layout. This is undefined
+       behavior". Parenting it to the page itself keeps it a free-floating
+       overlay whose anchors are its own. */
     Components.OnboardingOverlay {
+        parent: root
         anchors.fill: parent
+        z: 100
     }
 
     // Single entry point for "the user asked for this tab".
