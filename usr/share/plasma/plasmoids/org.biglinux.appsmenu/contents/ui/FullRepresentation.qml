@@ -178,6 +178,14 @@ EmptyPage {
                             view.section.property: ""
                             Keys.onRightPressed: event => contentListView.forceActiveFocus(Qt.TabFocusReason)
                         }
+                        // History and Frequently Used are fed by the same KDE
+                        // activity history as the Home page, so when they are
+                        // empty the reason belongs here too rather than an
+                        // unexplained blank list.
+                        Components.RecentActivityTracking {
+                            id: placesRecentActivity
+                        }
+
                         Components.AccessibleListView {
                             id: contentListView
                             Layout.fillWidth: true
@@ -190,6 +198,19 @@ EmptyPage {
                                     case 2: return kickoff.frequentUsageModel
                                     default: return null
                                 }
+                            }
+                            emptyIconName: categorySidebar.currentIndex === 0
+                                ? "edit-none" : "document-open-recent"
+                            emptyText: {
+                                if (categorySidebar.currentIndex !== 1 && categorySidebar.currentIndex !== 2) {
+                                    return i18nc("@info:status", "No applications here yet")
+                                }
+                                if (placesRecentActivity.trackingState === "off" || placesRecentActivity.trackingState === "error") {
+                                    return i18nc("@info:status", "Recent files and locations are turned off. Turn them on from the Home page or in System Settings.")
+                                }
+                                return categorySidebar.currentIndex === 1
+                                    ? i18nc("@info:status", "Nothing here yet. Applications, files and folders you open will appear here.")
+                                    : i18nc("@info:status", "Nothing here yet. Items you use often will appear here.")
                             }
                             Keys.onLeftPressed: event => categorySidebar.forceActiveFocus(Qt.BacktabFocusReason)
                         }
