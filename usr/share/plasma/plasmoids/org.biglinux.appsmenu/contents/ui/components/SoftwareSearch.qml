@@ -101,7 +101,33 @@ Item {
     readonly property var containsLetterPattern: /[A-Za-zÀ-ɏ]/
 
     function isSearchableQuery(text) {
-        return root.allowedQueryPattern.test(text) && root.containsLetterPattern.test(text)
+        if (!root.allowedQueryPattern.test(text) || !root.containsLetterPattern.test(text)) {
+            return false
+        }
+
+        /* The query also has to plausibly *name software*, or Pamac happily
+           matches the loose words against package descriptions and answers a
+           unit conversion with "perl, docbook5-xml, python-elementpath".
+           Observed with "1 l em ml".
+
+           Two cheap rules catch that without hurting real searches:
+             - a query that starts with a bare number is arithmetic or a unit
+               conversion ("1 l em ml", "100 km em mi"), never a package name;
+             - at least one word must be long enough to be a name, so "l em ml"
+               is rejected while "obs studio" and "firefox" are kept. */
+        const words = text.trim().split(/\s+/)
+        if (words.length > 4) {
+            return false
+        }
+        if (/^[0-9]+$/.test(words[0])) {
+            return false
+        }
+        for (let i = 0; i < words.length; ++i) {
+            if (words[i].length >= 3 && root.containsLetterPattern.test(words[i])) {
+                return true
+            }
+        }
+        return false
     }
 
     /* Package names as Pamac prints them. */
