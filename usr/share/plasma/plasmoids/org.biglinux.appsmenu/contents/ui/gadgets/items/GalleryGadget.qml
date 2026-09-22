@@ -142,9 +142,13 @@ Item {
             smooth: true
             property bool shown: false
             opacity: shown ? 1 : 0
-            scale: shown ? 1.08 : 1.0
+            /*  The zoom lasts as long as the crossfade. It used to run for the
+                whole interval, which meant the popup was repainting at vsync
+                for as long as this gadget was on screen — the effect is still
+                there at every transition, and the card is still between them.  */
+            scale: shown ? 1.04 : 1.0
             Behavior on opacity { NumberAnimation { duration: 900; easing.type: Easing.InOutQuad } }
-            Behavior on scale { enabled: shown; NumberAnimation { duration: gallery.intervalMs + 900; easing.type: Easing.Linear } }
+            Behavior on scale { enabled: shown; NumberAnimation { duration: 900; easing.type: Easing.OutCubic } }
             onStatusChanged: {
                 if (status === Image.Ready) {
                     shown = true
@@ -160,17 +164,63 @@ Item {
         MouseArea {
             anchors.fill: parent
             cursorShape: Qt.PointingHandCursor
-            onClicked: { const u = gallery.urlAt(gallery.index); if (u) Qt.openUrlExternally(u) }
+            onClicked: { gallery.forceActiveFocus(); const u = gallery.urlAt(gallery.index); if (u) Qt.openUrlExternally(u) }
         }
-        // nav
-        RowLayout {
-            anchors { bottom: parent.bottom; right: parent.right; margins: Kirigami.Units.smallSpacing }
-            opacity: gallery.host.hovered && files.count > 1 ? 1 : 0
+
+        /*  Previous / Next. They used to be bare tool buttons at opacity 0
+            until the card was hovered, drawn straight over the photograph —
+            so with no hover there was nothing, and with hover a grey glyph on
+            whatever the picture happened to be. Now each sits on a translucent
+            disc that reads on any picture, stays faintly present at rest so it
+            can be discovered, and comes fully up on hover or keyboard focus.  */
+        component NavButton : PC3.AbstractButton {
+            id: nav
+            required property string iconName
+            property bool atLeft: false
+            width: Kirigami.Units.iconSizes.medium + Kirigami.Units.smallSpacing * 2
+            height: width
+            anchors.verticalCenter: parent.verticalCenter
+            hoverEnabled: true
+            opacity: files.count > 1 ? (gallery.host.hovered || gallery.activeFocus || hovered ? 0.95 : 0.35) : 0
+            visible: opacity > 0
             Behavior on opacity { NumberAnimation { duration: Kirigami.Units.shortDuration } }
-            PC3.ToolButton { icon.name: "go-previous"; onClicked: gallery.show(gallery.index - 1, -1); Accessible.name: i18n("Previous picture") }
-            PC3.ToolButton { icon.name: "go-next"; onClicked: gallery.show(gallery.index + 1, 1); Accessible.name: i18n("Next picture") }
+            background: Rectangle {
+                radius: width / 2
+                color: Qt.rgba(0, 0, 0, nav.pressed ? 0.75 : (nav.hovered ? 0.6 : 0.45))
+                border.width: 1
+                border.color: Qt.rgba(1, 1, 1, 0.35)
+            }
+            contentItem: Kirigami.Icon {
+                source: nav.iconName
+                color: "white"
+                isMask: true
+            }
+            PC3.ToolTip.text: nav.Accessible.name
+            PC3.ToolTip.visible: hovered
+            PC3.ToolTip.delay: Kirigami.Units.toolTipDelay
+        }
+        NavButton {
+            iconName: "go-previous-symbolic"
+            anchors.left: parent.left
+            anchors.leftMargin: Kirigami.Units.smallSpacing
+            onClicked: gallery.show(gallery.index - 1, -1)
+            Accessible.name: i18n("Previous picture")
+        }
+        NavButton {
+            iconName: "go-next-symbolic"
+            anchors.right: parent.right
+            anchors.rightMargin: Kirigami.Units.smallSpacing
+            onClicked: gallery.show(gallery.index + 1, 1)
+            Accessible.name: i18n("Next picture")
         }
     }
+
+    /*  Left / Right step through the pictures while the gadget has focus,
+        which it takes on click. Other keys are left alone so the menu's own
+        navigation (Tab, Escape, Up/Down between rows) keeps working.  */
+    activeFocusOnTab: true
+    Keys.onLeftPressed: event => { gallery.show(gallery.index - 1, -1); event.accepted = true }
+    Keys.onRightPressed: event => { gallery.show(gallery.index + 1, 1); event.accepted = true }
 
     ColumnLayout {
         anchors.centerIn: parent
