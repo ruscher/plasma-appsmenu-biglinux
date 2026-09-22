@@ -183,6 +183,12 @@ EmptyPage {
         spacing: 0
 
         // ── toolbar ──
+        /*  Two blocks: everything on the left fills and elides, everything on
+            the right keeps its natural size. The controls therefore never move
+            — not when the hint changes with edit mode, not with a long
+            translation, not on a narrow menu. Before, the hint label was the
+            only filler and it was hidden in edit mode, so the whole right side
+            slid left every time Edit was pressed.  */
         RowLayout {
             id: toolbar
             Layout.fillWidth: true
@@ -190,143 +196,215 @@ EmptyPage {
             Layout.rightMargin: Kirigami.Units.largeSpacing
             Layout.topMargin: Kirigami.Units.smallSpacing
             Layout.bottomMargin: Kirigami.Units.smallSpacing
-            spacing: Kirigami.Units.smallSpacing
+            spacing: Kirigami.Units.largeSpacing
 
-            Kirigami.Icon {
-                source: "dashboard-show"
-                Layout.preferredWidth: Kirigami.Units.iconSizes.smallMedium
-                Layout.preferredHeight: Kirigami.Units.iconSizes.smallMedium
-            }
-            PC3.Label {
-                text: grid.editing
-                    ? i18n("Drag to reorder · use the badges to remove, resize or configure")
-                    : i18n("Gadgets")
-                font.weight: grid.editing ? Font.Normal : Font.DemiBold
-                opacity: grid.editing ? 0.7 : 1
-                elide: Text.ElideRight
-            }
-            PC3.Label {
-                visible: !grid.editing
-                text: i18n("press and hold a gadget to move it")
-                font.pointSize: Kirigami.Theme.smallFont.pointSize * 0.9
-                opacity: 0.5
-                elide: Text.ElideRight
+            RowLayout {
+                id: toolbarLeft
                 Layout.fillWidth: true
-            }
+                Layout.minimumWidth: 0
+                spacing: Kirigami.Units.smallSpacing
 
-            // Columns selector
-            Row {
-                spacing: 2
-                Repeater {
-                    model: [2, 3, 4]
-                    delegate: PC3.ToolButton {
-                        required property int modelData
-                        text: String(modelData)
-                        checkable: true
-                        checked: Plasmoid.configuration.gadgetColumns === modelData
-                        autoExclusive: true
-                        display: PC3.AbstractButton.TextOnly
-                        implicitWidth: Kirigami.Units.gridUnit * 1.8
-                        onClicked: Plasmoid.configuration.gadgetColumns = modelData
-                        Accessible.name: i18np("%1 column", "%1 columns", modelData)
-                        PC3.ToolTip.text: i18np("%1 column", "%1 columns", modelData)
-                        PC3.ToolTip.visible: hovered
-                    }
+                Kirigami.Icon {
+                    source: "dashboard-show"
+                    Layout.preferredWidth: Kirigami.Units.iconSizes.smallMedium
+                    Layout.preferredHeight: Kirigami.Units.iconSizes.smallMedium
+                }
+                PC3.Label {
+                    text: i18n("Gadgets")
+                    font.weight: Font.DemiBold
+                    elide: Text.ElideRight
+                    Layout.minimumWidth: 0
+                    Layout.maximumWidth: implicitWidth
+                    Accessible.role: Accessible.Heading
+                }
+                PC3.Label {
+                    text: grid.editing
+                        ? i18n("Drag to reorder · use the badges to remove, resize or configure")
+                        : i18n("press and hold a gadget to move it")
+                    font.pointSize: Kirigami.Theme.smallFont.pointSize * 0.9
+                    opacity: 0.55
+                    elide: Text.ElideRight
+                    Layout.fillWidth: true
+                    Layout.minimumWidth: 0
                 }
             }
 
-            PC3.ToolButton {
-                id: editButton
-                icon.name: grid.editing ? "dialog-ok-apply" : "document-edit"
-                text: grid.editing ? i18n("Done") : i18n("Edit")
-                display: PC3.AbstractButton.TextBesideIcon
-                checkable: true
-                checked: grid.editing
-                onToggled: grid.editing = checked
-                Accessible.name: grid.editing ? i18n("Finish editing gadgets") : i18n("Edit gadgets")
-            }
-            PC3.ToolButton {
-                icon.name: "list-add"
-                text: i18n("Add")
-                display: PC3.AbstractButton.TextBesideIcon
-                onClicked: gallery.open()
-                Accessible.name: i18n("Add gadget")
+            RowLayout {
+                id: toolbarRight
+                Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                spacing: Kirigami.Units.smallSpacing
+
+                // Columns selector
+                Row {
+                    spacing: 2
+                    Repeater {
+                        model: [2, 3, 4]
+                        delegate: PC3.ToolButton {
+                            required property int modelData
+                            text: String(modelData)
+                            checkable: true
+                            checked: Plasmoid.configuration.gadgetColumns === modelData
+                            autoExclusive: true
+                            display: PC3.AbstractButton.TextOnly
+                            implicitWidth: Kirigami.Units.gridUnit * 1.8
+                            onClicked: Plasmoid.configuration.gadgetColumns = modelData
+                            Accessible.name: i18np("%1 column", "%1 columns", modelData)
+                            PC3.ToolTip.text: i18np("%1 column", "%1 columns", modelData)
+                            PC3.ToolTip.visible: hovered
+                        }
+                    }
+                }
+
+                PC3.ToolButton {
+                    id: editButton
+                    icon.name: grid.editing ? "dialog-ok-apply" : "document-edit"
+                    text: grid.editing ? i18n("Done") : i18n("Edit")
+                    display: PC3.AbstractButton.TextBesideIcon
+                    checkable: true
+                    checked: grid.editing
+                    onToggled: grid.editing = checked
+                    Accessible.name: grid.editing ? i18n("Finish editing gadgets") : i18n("Edit gadgets")
+                    /*  "Edit" and "Done" differ in width, and a right-aligned
+                        block moves by exactly that difference when the label
+                        swaps. Sizing the button for the longer of the two, in
+                        whatever language, keeps everything to its right still. */
+                    TextMetrics { id: editLabel; font: editButton.font; text: i18n("Edit") }
+                    TextMetrics { id: doneLabel; font: editButton.font; text: i18n("Done") }
+                    Layout.preferredWidth: Math.max(editLabel.width, doneLabel.width)
+                        + editButton.icon.width + editButton.spacing
+                        + editButton.leftPadding + editButton.rightPadding
+                }
+                PC3.ToolButton {
+                    icon.name: "list-add"
+                    text: i18n("Add")
+                    display: PC3.AbstractButton.TextBesideIcon
+                    onClicked: gallery.open()
+                    Accessible.name: i18n("Add gadget")
+                }
             }
         }
 
         Kirigami.Separator { Layout.fillWidth: true; opacity: 0.4 }
 
         // ── grid ──
-        Flickable {
-            id: flick
+        Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            contentWidth: width
-            contentHeight: gridWrapper.implicitHeight
-            clip: true
-            boundsBehavior: Flickable.StopAtBounds
-            flickableDirection: Flickable.VerticalFlick
-            interactive: !grid.dragUid.length
-            PC3.ScrollBar.vertical: PC3.ScrollBar { id: vbar }
 
-            Item {
-                id: gridWrapper
-                width: flick.width
-                implicitHeight: grid.implicitHeight + Kirigami.Units.largeSpacing * 2 + 12
+            Flickable {
+                id: flick
+                anchors.fill: parent
+                contentWidth: width
+                contentHeight: gridWrapper.implicitHeight
+                clip: true
+                boundsBehavior: Flickable.StopAtBounds
+                flickableDirection: Flickable.VerticalFlick
+                interactive: !grid.dragUid.length
+                PC3.ScrollBar.vertical: PC3.ScrollBar { id: vbar }
 
-                Gadgets.GadgetGrid {
-                    id: grid
-                    x: Kirigami.Units.largeSpacing
-                    y: Kirigami.Units.largeSpacing
-                    width: parent.width - Kirigami.Units.largeSpacing * 2 - Kirigami.Units.smallSpacing * 2
-                    height: implicitHeight
-                    columns: Math.max(2, Math.min(4, Plasmoid.configuration.gadgetColumns))
-                    active: root.pageActive && kickoff.expanded
-                    viewportTop: flick.contentY - y
-                    viewportBottom: flick.contentY + flick.height - y
-                    cacheGet: root.cacheGet
-                    cacheSet: root.cacheSet
-                    cacheKeys: root.cacheKeys
-                    cacheRemove: root.cacheRemove
-                    onLayoutChanged: saveTimer.restart()
-                    onSettingsRequested: host => settingsDialog.openFor(host)
-                }
-            }
+                Item {
+                    id: gridWrapper
+                    width: flick.width
+                    implicitHeight: grid.implicitHeight + Kirigami.Units.largeSpacing * 2 + 12
 
-            // Auto-scroll while a card is dragged into a narrow zone at the
-            // top/bottom edge. Speed grows with depth into the zone; the grid
-            // keeps the card under the pointer and postpones reordering.
-            property real dragViewportY: -1
-            Connections {
-                target: grid
-                function onDragPointerMoved(cy) { flick.dragViewportY = cy + grid.y - flick.contentY }
-            }
-            Timer {
-                id: autoScroll
-                interval: 16
-                repeat: true
-                running: grid.dragUid.length > 0
-                readonly property real edge: Kirigami.Units.gridUnit * 1.6
-                onTriggered: {
-                    const y = flick.dragViewportY
-                    const maxY = Math.max(0, flick.contentHeight - flick.height)
-                    let delta = 0
-                    if (y >= 0 && y < edge && flick.contentY > 0)
-                        delta = -(2 + 10 * (1 - y / edge))
-                    else if (y > flick.height - edge && y <= flick.height && flick.contentY < maxY)
-                        delta = 2 + 10 * (1 - (flick.height - y) / edge)
-                    if (delta !== 0) {
-                        const before = flick.contentY
-                        flick.contentY = Math.max(0, Math.min(maxY, before + delta))
-                        const applied = flick.contentY - before
-                        grid.autoScrolling = true
-                        if (applied !== 0) grid.scrollBy(applied)
-                    } else if (grid.autoScrolling) {
-                        grid.autoScrolling = false
+                    Gadgets.GadgetGrid {
+                        id: grid
+                        x: Kirigami.Units.largeSpacing
+                        y: Kirigami.Units.largeSpacing
+                        width: parent.width - Kirigami.Units.largeSpacing * 2 - Kirigami.Units.smallSpacing * 2
+                        height: implicitHeight
+                        columns: Math.max(2, Math.min(4, Plasmoid.configuration.gadgetColumns))
+                        active: root.pageActive && kickoff.expanded
+                        viewportTop: flick.contentY - y
+                        viewportBottom: flick.contentY + flick.height - y
+                        cacheGet: root.cacheGet
+                        cacheSet: root.cacheSet
+                        cacheKeys: root.cacheKeys
+                        cacheRemove: root.cacheRemove
+                        onLayoutChanged: saveTimer.restart()
+                        onSettingsRequested: host => settingsDialog.openFor(host)
                     }
                 }
-                onRunningChanged: if (!running) { grid.autoScrolling = false; flick.dragViewportY = -1 }
+
+                /*  Auto-scroll while a card is dragged into a zone at the top or
+                    bottom edge. The zone is wide enough to hit without aiming
+                    (2.6 grid units, up from 1.6) and, unlike before, it is
+                    drawn while dragging so the user knows it is there. Speed
+                    ramps with the square of the depth into the zone: gentle at
+                    the boundary, brisk at the very edge, no jump on entry.
+                    The grid keeps the card under the pointer and postpones
+                    reordering until scrolling settles.  */
+                property real dragViewportY: -1
+                readonly property real scrollEdge: Kirigami.Units.gridUnit * 2.6
+                readonly property bool inTopZone: grid.dragUid.length > 0 && dragViewportY >= 0 && dragViewportY < scrollEdge
+                readonly property bool inBottomZone: grid.dragUid.length > 0 && dragViewportY > height - scrollEdge && dragViewportY <= height
+                Connections {
+                    target: grid
+                    function onDragPointerMoved(cy) { flick.dragViewportY = cy + grid.y - flick.contentY }
+                }
+                Timer {
+                    id: autoScroll
+                    interval: 16
+                    repeat: true
+                    running: grid.dragUid.length > 0
+                    readonly property real minStep: 1.5   // px per tick at the zone boundary (~90 px/s)
+                    readonly property real maxStep: 11    // px per tick at the very edge (~660 px/s)
+                    onTriggered: {
+                        const y = flick.dragViewportY
+                        const edge = flick.scrollEdge
+                        const maxY = Math.max(0, flick.contentHeight - flick.height)
+                        let delta = 0
+                        if (flick.inTopZone && flick.contentY > 0) {
+                            const depth = 1 - y / edge
+                            delta = -(minStep + (maxStep - minStep) * depth * depth)
+                        } else if (flick.inBottomZone && flick.contentY < maxY) {
+                            const depth = 1 - (flick.height - y) / edge
+                            delta = minStep + (maxStep - minStep) * depth * depth
+                        }
+                        if (delta !== 0) {
+                            const before = flick.contentY
+                            flick.contentY = Math.max(0, Math.min(maxY, before + delta))
+                            const applied = flick.contentY - before
+                            grid.autoScrolling = true
+                            if (applied !== 0) grid.scrollBy(applied)
+                        } else if (grid.autoScrolling) {
+                            grid.autoScrolling = false
+                        }
+                    }
+                    onRunningChanged: if (!running) { grid.autoScrolling = false; flick.dragViewportY = -1 }
+                }
             }
+
+            /*  The two zones, drawn over the viewport (not inside the content,
+                so they do not scroll away) only while something is dragged. They
+                take no input: the drag itself is what moves the pointer into
+                them.  */
+            component ScrollZone : Rectangle {
+                required property bool atTop
+                property bool armed: false
+                readonly property bool canScroll: atTop ? flick.contentY > 0
+                                                        : flick.contentY < flick.contentHeight - flick.height - 1
+                anchors.left: parent.left
+                anchors.right: parent.right
+                height: flick.scrollEdge
+                visible: opacity > 0
+                opacity: grid.dragUid.length > 0 && canScroll ? (armed ? 1 : 0.55) : 0
+                Behavior on opacity { NumberAnimation { duration: Kirigami.Units.shortDuration } }
+                gradient: Gradient {
+                    GradientStop { position: atTop ? 0 : 1; color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.22) }
+                    GradientStop { position: atTop ? 1 : 0; color: "transparent" }
+                }
+                Kirigami.Icon {
+                    anchors.centerIn: parent
+                    source: parent.atTop ? "arrow-up" : "arrow-down"
+                    width: Kirigami.Units.iconSizes.smallMedium
+                    height: width
+                    color: Kirigami.Theme.highlightColor
+                }
+                Accessible.ignored: true
+            }
+            ScrollZone { atTop: true; anchors.top: parent.top; armed: flick.inTopZone }
+            ScrollZone { atTop: false; anchors.bottom: parent.bottom; armed: flick.inBottomZone }
         }
 
         // Empty state
