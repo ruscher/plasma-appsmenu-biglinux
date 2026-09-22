@@ -15,20 +15,55 @@ The old alarm ran `canberra-gtk-play || paplay || pw-play` through the
 executable data engine: one shot, unstoppable, unloopable, and a process the
 gadget could not clean up.
 
-`gadgets/CountdownAlarm.qml` is a `MediaPlayer` with `loops: Infinite` on the
-system sound theme's alarm (Ocean, then freedesktop, then Oxygen, tried in
-order on error). It is owned by the gadget item, starts and stops with the
-single fact *"at least one finished event has not been acknowledged"*, and is
-stopped on destruction. There is no process to orphan.
+`gadgets/CountdownAlarm.qml` keeps the short-lived process and adds what was
+missing. It owns a `Timer` that fires every 2.5 s — about the length of the
+sound — while `ringing` is true, and each tick runs one play command that
+exits on its own. The loop is therefore in QML, not in a shell: acknowledging
+stops it at the next tick, at most one sound plays out, there is no
+`while true`, and nothing survives the gadget. `ringing` is the single fact
+*"at least one finished event has not been acknowledged"*.
 
-It lives in its own file because it imports `QtMultimedia`: the gadget loads
-it through a `Loader`, and if the module is absent the load fails in that file
-alone and the old single beep is used. `qt6-multimedia` is an optional
-dependency in the PKGBUILD for that reason.
+The command is a fixed string — `canberra-gtk-play -i alarm-clock-elapsed`,
+falling back to `paplay` and `pw-play` on the freedesktop theme's file.
+Nothing from an event, a setting or a file name is interpolated into it.
 
-### Verified on the VM
+### Why not QtMultimedia
 
-Two events set to the same minute:
+The first version of this file *was* a `MediaPlayer { loops: Infinite }`,
+which is the obvious way to loop a sound and worked on the lab VM. It cost
+the developer's desktop 122 crashes.
+
+Importing `QtMultimedia` brings up the FFmpeg backend, which brings up
+Vulkan, which loads the machine's implicit Vulkan layers. On a machine with
+**vkBasalt** enabled that combination segfaults. Inside plasmashell it is not
+a missing sound, it is the whole desktop in a restart loop: the panel and the
+menu blink in and out for as long as the gadget is on the board, because the
+Countdown card creates the player as soon as it is instantiated.
+
+Measured with a file containing nothing but a `MediaPlayer`, under bare
+`qml6` (so: not a Plasma problem, and not this plasmoid's own code):
+
+| run | result |
+|---|---|
+| as the machine is configured | **SIGSEGV** |
+| `VK_LOADER_LAYERS_DISABLE='*'` | survives |
+| `DISABLE_VKBASALT=1` | **survives** |
+| FFmpeg hardware decoding disabled | SIGSEGV |
+
+So the trigger is the Vulkan layer, not hardware decoding, and not something
+the gadget can detect beforehand — a segfault cannot be caught, and
+`Loader.status === Error` only covers a *missing* module, not one that
+crashes the process while loading. The rule this leaves behind: **the shell
+is not the process that gets to find out whether the media stack works
+here.** Audio goes out of process, where a broken stack costs a sound and
+nothing more.
+
+`qt6-multimedia` is no longer an optional dependency; `libcanberra` is.
+
+### Verified
+
+On the VM, two events set to the same minute (with the earlier player, the
+behaviour the rewrite reproduces):
 
 ```
 t=69s  ringing=2  playing=True   notes=2   both fired, one loop
@@ -38,8 +73,11 @@ t=74s  ringing=1  playing=True   notes=1   acknowledge #2
 t=75s  ringing=0  playing=False  notes=0   stopped
 ```
 
-`pgrep canberra|paplay|pw-play` → 0 throughout. The backend announced itself
-in the journal: `Using Qt multimedia with FFmpeg`.
+On the developer's machine, the rewritten file loaded on its own: `ringing`
+on → `playing` true and audible, held for 6 s across repetitions, `ringing`
+off → `playing` false, process exit 0, and `pgrep canberra|paplay|pw-play`
+empty afterwards. plasmashell then ran 2.5 minutes with the gadget on the
+board and the menu open: same pid, `NRestarts=0`, no new core dumps.
 
 ## The window that said "Plasma"
 

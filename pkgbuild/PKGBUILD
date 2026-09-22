@@ -25,12 +25,12 @@ depends=('plasma-workspace'     # plasmashell + org.kde.plasma.private.{kicker,m
          'kcoreaddons'
          'ksvg'
          'qt6-declarative')
-optdepends=('qt6-multimedia: looping alarm sound in the Countdown gadget (a single beep without it)'
+
+optdepends=('libcanberra: canberra-gtk-play, the alarm sound of the Countdown gadget'
             'kimageformats: AVIF, HEIC/HEIF and JPEG XL pictures in the Gallery gadget'
             'glib2: gio, used by Quick Links to launch applications from their desktop entry'
             'xdg-utils: open the preferred calendar application from the Calendar gadget'
             'kio: kioclient, used to launch the calendar application'
-            'libcanberra: fallback alarm beep for the Countdown gadget when qt6-multimedia is absent'
             'ocean-sound-theme: default alarm sound used by the Countdown gadget'
             'noto-fonts-emoji: emoji rendering in Notes, Tips and Quotes gadgets')
 

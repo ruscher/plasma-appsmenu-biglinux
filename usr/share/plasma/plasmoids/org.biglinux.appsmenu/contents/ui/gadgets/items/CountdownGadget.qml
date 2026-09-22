@@ -5,7 +5,7 @@
     Countdown — events and quick timers. The next event is shown large, the
     others in a scrolling list under it. When one finishes, a notification
     from this gadget's own component ("Countdown", chronometer icon) stays up
-    and the alarm sound loops until it is dismissed — from the notification or
+    and the alarm sound repeats until it is dismissed — from the notification or
     from the card — which marks the event acknowledged.
 
     cfg: { events: [{ name, when: "yyyy-MM-dd HH:mm", created, quick, fired, acked }] }
@@ -16,7 +16,6 @@ import QtQuick.Layouts 1.15
 import QtQuick.Controls 2.15 as QQC2
 import org.kde.plasma.components 3.0 as PC3
 import org.kde.kirigami 2.20 as Kirigami
-import org.kde.plasma.plasma5support 2.0 as P5Support
 import org.kde.notification as KNotification
 
 Item {
@@ -116,10 +115,6 @@ Item {
             notifications = open
             n.sendEvent()
         }
-        if (!alarmAvailable) {
-            // No QtMultimedia: at least one beep through the system sound theme.
-            sound.run("canberra-gtk-play -i alarm-clock-elapsed 2>/dev/null || paplay /usr/share/sounds/ocean/stereo/alarm-clock-elapsed.oga 2>/dev/null || pw-play /usr/share/sounds/ocean/stereo/alarm-clock-elapsed.oga")
-        }
     }
 
     /*  Open notifications by event, so a dismissal on the card can close the
@@ -139,14 +134,11 @@ Item {
     /*  Events that have finished and nobody has acknowledged yet. As long as
         there is one, the alarm rings; one loop serves them all.  */
     readonly property var ringingEvents: events.filter(e => e.fired && !e.acked)
-    readonly property bool alarmAvailable: alarmLoader.status === Loader.Ready
-
+    /*  The alarm lives in its own file so the sound has one owner: it starts
+        and stops with `ringing`, and it goes away with this gadget.  */
     Loader {
         id: alarmLoader
         source: Qt.resolvedUrl("../CountdownAlarm.qml")
-        /*  A system without QtMultimedia fails to load the file; that is
-            expected and handled — the fallback beep above takes over. */
-        onStatusChanged: if (status === Loader.Error) console.info("Countdown: QtMultimedia unavailable, alarm falls back to a single beep")
     }
     Binding {
         target: alarmLoader.item
@@ -187,13 +179,6 @@ Item {
             onClosed: note.ackMine()
         }
     }
-    P5Support.DataSource {
-        id: sound
-        engine: "executable"
-        onNewData: source => disconnectSource(source)
-        function run(cmd) { connectSource(cmd) }
-    }
-
     SequentialAnimation {
         id: pop
         NumberAnimation { target: mainCol; property: "scale"; to: 1.03; duration: 90 }

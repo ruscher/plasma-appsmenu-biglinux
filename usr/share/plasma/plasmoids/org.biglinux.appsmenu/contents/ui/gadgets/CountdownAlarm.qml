@@ -2,54 +2,68 @@
     SPDX-FileCopyrightText: 2026 BigLinux Team
     SPDX-License-Identifier: GPL-2.0-or-later
 
-    CountdownAlarm — the sound of a finished countdown, looping until it is
+    CountdownAlarm — the sound of a finished countdown, repeated until it is
     acknowledged.
 
-    It is a MediaPlayer, not a process. The previous alarm ran
-    `canberra-gtk-play || paplay || pw-play` through the executable data
-    engine, which plays once and cannot be stopped, looped or cleaned up.
-    A player owned by this item starts and stops with `ringing`, is stopped
-    when the item is destroyed, never forks, and one instance serves however
-    many countdowns end together.
+    Deliberately *not* QtMultimedia. Importing QtMultimedia brings up the
+    FFmpeg backend, which brings up Vulkan, which loads whatever implicit
+    Vulkan layers the machine has installed. On a machine with vkBasalt
+    enabled that combination segfaults — and inside plasmashell it takes the
+    whole desktop with it, restart after restart, which is a far worse bug
+    than a missing sound. A file containing nothing but a MediaPlayer
+    reproduces it under bare `qml6`, and the same file survives with the
+    Vulkan layers disabled, so the shell must not be the process that finds
+    out whether the media stack works here.
 
-    Kept in its own file because it imports QtMultimedia: the gadget loads it
-    through a Loader and falls back to a single beep if the module is not
-    installed, instead of failing to load altogether.
+    The sound is therefore played by a short-lived process, one per
+    repetition, each exiting on its own. The loop is this item's Timer, not a
+    shell loop: acknowledging stops it at the next tick, and nothing outlives
+    the gadget — no `while true`, no player left running, no module that can
+    bring the shell down.
+
+    The command is a fixed string. Nothing from an event, a setting or a
+    file name is interpolated into it.
 */
 
 import QtQuick
-import QtMultimedia
+import org.kde.plasma.plasma5support as P5Support
 
 Item {
     id: alarm
 
     property bool ringing: false
-    readonly property bool playing: player.playbackState === MediaPlayer.PlayingState
+    readonly property bool playing: repeat.running
 
-    /*  The alarm sound of the system's own sound themes, tried in order; a
-        theme that is missing is skipped on error rather than left silent.  */
-    readonly property var candidates: [
-        "file:///usr/share/sounds/ocean/stereo/alarm-clock-elapsed.oga",
-        "file:///usr/share/sounds/freedesktop/stereo/alarm-clock-elapsed.oga",
-        "file:///usr/share/sounds/Oxygen-Sys-App-Message.ogg"
-    ]
-    property int candidate: 0
+    /*  The sound theme's own alarm first, then a known file for systems
+        whose theme does not carry it; `||` moves on when a player or a file
+        is missing, and the last one failing simply leaves the notification
+        as the only signal.  */
+    readonly property string command:
+        "canberra-gtk-play -i alarm-clock-elapsed"
+        + " || paplay /usr/share/sounds/freedesktop/stereo/alarm-clock-elapsed.oga"
+        + " || pw-play /usr/share/sounds/freedesktop/stereo/alarm-clock-elapsed.oga"
 
-    MediaPlayer {
+    P5Support.DataSource {
         id: player
-        source: alarm.candidates[Math.min(alarm.candidate, alarm.candidates.length - 1)]
-        loops: MediaPlayer.Infinite
-        audioOutput: AudioOutput { volume: 0.85 }
-        onErrorOccurred: (error, message) => {
-            if (alarm.candidate + 1 < alarm.candidates.length) {
-                alarm.candidate++
-                if (alarm.ringing) {
-                    player.play()
-                }
-            }
+        engine: "executable"
+        connectedSources: []
+        onNewData: source => disconnectSource(source)
+    }
+
+    /*  Roughly the length of the sound, so the repetitions read as one
+        continuous alarm. Disconnecting first lets the same command run
+        again; the previous process has already exited by then.  */
+    Timer {
+        id: repeat
+        interval: 2500
+        repeat: true
+        triggeredOnStart: true
+        running: alarm.ringing
+        onTriggered: {
+            player.disconnectSource(alarm.command)
+            player.connectSource(alarm.command)
         }
     }
 
-    onRingingChanged: ringing ? player.play() : player.stop()
-    Component.onDestruction: player.stop()
+    Component.onDestruction: player.disconnectSource(alarm.command)
 }
