@@ -163,6 +163,8 @@ Item {
 
         MouseArea {
             anchors.fill: parent
+            /*  Above the slides, below the arrows. */
+            z: 5
             cursorShape: Qt.PointingHandCursor
             onClicked: { gallery.forceActiveFocus(); const u = gallery.urlAt(gallery.index); if (u) Qt.openUrlExternally(u) }
         }
@@ -172,16 +174,25 @@ Item {
             so with no hover there was nothing, and with hover a grey glyph on
             whatever the picture happened to be. Now each sits on a translucent
             disc that reads on any picture, stays faintly present at rest so it
-            can be discovered, and comes fully up on hover or keyboard focus.  */
+            can be discovered, and comes fully up on hover or keyboard focus.
+
+            `z` is the whole reason they were invisible in practice. The two
+            crossfading slides swap `z: 0` and `z: 1` on every transition, so
+            whichever one is showing painted straight over buttons left at the
+            default `z: 0`. They were there the entire time — faintly visible
+            before the first picture finished loading, gone for good the
+            moment it did, and hover could not bring them back because hover
+            only changes opacity, not stacking.  */
         component NavButton : PC3.AbstractButton {
             id: nav
+            z: 10
             required property string iconName
             property bool atLeft: false
             width: Kirigami.Units.iconSizes.medium + Kirigami.Units.smallSpacing * 2
             height: width
             anchors.verticalCenter: parent.verticalCenter
             hoverEnabled: true
-            opacity: files.count > 1 ? (gallery.host.hovered || gallery.activeFocus || hovered ? 0.95 : 0.35) : 0
+            opacity: files.count > 1 ? (gallery.host.hovered || gallery.activeFocus || hovered ? 0.95 : 0.45) : 0
             visible: opacity > 0
             Behavior on opacity { NumberAnimation { duration: Kirigami.Units.shortDuration } }
             background: Rectangle {
