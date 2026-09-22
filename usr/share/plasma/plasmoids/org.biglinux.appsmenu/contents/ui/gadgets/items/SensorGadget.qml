@@ -38,6 +38,10 @@ Item {
     required property var host
 
     readonly property bool compact: host.compact
+    /*  A short card drops the verdict line even when it is not 1x1: on a
+        2x1 that third line costs half the rows the card could show, and
+        the verdict is still in the tooltip and the accessible name. */
+    readonly property bool tight: compact || height < Kirigami.Units.gridUnit * 10
     readonly property var all: G.SensorCatalog.temperatures
     readonly property var hidden: host.cfg.hidden || []
     readonly property var forcedOn: host.cfg.shown || []
@@ -182,7 +186,7 @@ Item {
             font.weight: Font.DemiBold
             opacity: 0.55
             elide: Text.ElideRight
-            topPadding: sensor.compact ? 1 : Kirigami.Units.smallSpacing
+            topPadding: sensor.tight ? 1 : Kirigami.Units.smallSpacing
             Accessible.role: Accessible.Heading
         }
 
@@ -235,7 +239,7 @@ Item {
                 On a 1x1 card the row is two lines and this one is dropped;
                 the tooltip and the accessible name still carry it. */
             PC3.Label {
-                visible: !sensor.compact
+                visible: !sensor.tight
                 text: row.waiting ? i18nc("@info a sensor that has not reported a reading yet", "Waiting for a reading")
                                   : sensor.shortBandText(row.b)
                 font.pointSize: Kirigami.Theme.smallFont.pointSize

@@ -33,6 +33,9 @@ Item {
     required property var host
 
     readonly property bool compact: host.compact
+    /*  As in Sensor: a short card drops the second line rather than
+        showing half as many fans. */
+    readonly property bool tight: compact || height < Kirigami.Units.gridUnit * 10
     readonly property var all: G.SensorCatalog.fans
     readonly property var hidden: host.cfg.hidden || []
     readonly property bool animate: host.cfg.animate !== false
@@ -129,7 +132,7 @@ Item {
             font.weight: Font.DemiBold
             opacity: 0.55
             elide: Text.ElideRight
-            topPadding: fans.compact ? 1 : Kirigami.Units.smallSpacing
+            topPadding: fans.tight ? 1 : Kirigami.Units.smallSpacing
             Accessible.role: Accessible.Heading
         }
 
@@ -179,7 +182,7 @@ Item {
             /*  Where the fan is, in words — the card it belongs to, or the
                 chip that reports it. */
             PC3.Label {
-                visible: !fans.compact
+                visible: !fans.tight
                 text: row.waiting
                     ? i18nc("@info a fan that has not reported a speed yet", "Waiting for a reading")
                     : row.modelData.group
