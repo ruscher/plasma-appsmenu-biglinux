@@ -2,16 +2,23 @@
 
 ## Summary
 
-Seven reported faults across six gadgets. Five of them turned out to be
-one of three *causes*, none of which was where the symptom pointed:
+Eight reported faults across seven gadgets. Most of them came down to a
+handful of *causes*, and not one was where the symptom pointed:
 
 - two gadgets showed nothing because a KSysGuard model only subscribes
   when its sensor list is assigned while it is enabled, and a card is
   created disabled;
+- a third showed nothing because plasma-nm's details model publishes no
+  role names to QML, so every field read as `undefined`;
 - the Gallery arrows were painted underneath the photograph;
 - the Countdown stopped counting when its card scrolled off screen, and
   the pop-up it did send was suppressed by the desktop's own Do Not
   Disturb — which is the entire "Wayland does not work" report.
+
+A pattern worth naming: three of the eight were a *model* quietly
+answering nothing — a subscription never made, roles that do not exist,
+a value dropped at the wrong instant. None of them logs anything, and
+all three looked like "the gadget is broken".
 
 Everything is fixed in code, installed, and verified on real hardware.
 plasmashell never crashed during this stage, and every run of the final
@@ -27,7 +34,8 @@ tree produced **zero QML messages**.
 | 4 | Gallery arrows vanish and hover does not bring them back | the two crossfading slides swap `z: 0/1`; the buttons were at the default `z: 0` | `03` |
 | 5 | GPU Meter scrolls for two GPUs | one fixed card shape, and the container made to cope | `04` |
 | 6 | Configure Live Scores does not fit | the dialog never gave a settings page its width after the first one, so the page laid out at width 0; and the competition grid depended on width | `05` |
-| 7 | Countdown: no notification, no sound on Wayland; fine on X11 | the tick required the card to be *in the viewport*; and Do Not Disturb has been on since 2025 on that machine | `06` |
+| 7 | Network → Details shows no fields | plasma-nm's `ConnectionDetailsModel` publishes no role *names* to QML, so every field read as `undefined` | `11` |
+| 8 | Countdown: no notification, no sound on Wayland; fine on X11 | the tick required the card to be *in the viewport*; and Do Not Disturb has been on since 2025 on that machine | `06` |
 
 ## Files changed
 
@@ -44,6 +52,7 @@ tree produced **zero QML messages**.
 | `gadgets/lib/Formula1Provider.js` | **new** — jolpica/Ergast |
 | `gadgets/GadgetSettingsDialog.qml` | width handed to the page, scale-aware sizing, clamps |
 | `gadgets/GadgetHost.qml` | `pageActive` |
+| `gadgets/items/network/NetworkDetails.qml` | rows read by numeric role, active-set fingerprint, uplink-first ordering |
 | `gadgets/items/CountdownGadget.qml` | ticks on `pageActive`, reads and explains Do Not Disturb |
 | `gadgets/GadgetRegistry.qml` | icons that exist |
 | `gadgets/icons/{fan,cpu,gpu,temperature}-symbolic.svg` | fan redrawn; three new |
@@ -112,6 +121,14 @@ the popup. *Tested*: real hardware.
 all. *After*: next race, results, drivers, teams, calendar, from
 jolpica/Ergast, cached, with team colours and flags and no dependence on
 remote images. *Tested*: real hardware, live data.
+
+### Network → Details — `11`
+
+*Before*: the right heading over fourteen blank rows. *Cause*: role names
+that do not exist. *After*: speed, MAC, device, IPv4 and IPv6 with their
+gateways and DNS servers, each with a copy button, and the primary
+connection chosen correctly among four active ones. *Tested*: real
+hardware.
 
 ### Countdown — `06`
 
@@ -185,6 +202,7 @@ context, plurals and locale-aware numbers and dates — the audit reports
 | GPU Meter | **pass** for 1 and 2 GPUs; 3+ unverified |
 | Live Scores settings | **pass** |
 | Formula 1 | **pass** |
+| Network → Details | **pass** for Ethernet, IPv4 and IPv6; Wi-Fi and VPN unverified |
 | Countdown | **pass** — cause found and explained; the pop-up remains the user's setting |
 | Wayland vs X11 | **answered**: not the cause |
 | performance | **pass** |

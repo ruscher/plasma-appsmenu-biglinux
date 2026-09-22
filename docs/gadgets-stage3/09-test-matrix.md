@@ -95,6 +95,21 @@ Four labels, used strictly:
 | offline / API error | **NOT TESTED** against a real outage | — |
 | missing fields | pass by construction — every optional field is guarded | source |
 
+## Network → Details
+
+| check | result | where |
+|---|---|---|
+| Ethernet speed, MAC, device | pass | REAL |
+| IPv4 address, gateway, both DNS | pass | REAL |
+| IPv6 address, gateway, both DNS | pass | REAL |
+| copy buttons on copyable values only | pass | REAL |
+| primary picked among four active connections | pass | REAL |
+| Wi-Fi, VPN sections | **NOT TESTED** — neither machine has one | — |
+
+A note on the earlier "smoke test" of this file: it was run with a wrong
+relative path, so the component never loaded and the pass was worthless.
+The check now renders the panel and looks at it. See `11`.
+
 ## Countdown
 
 | check | result | where |
