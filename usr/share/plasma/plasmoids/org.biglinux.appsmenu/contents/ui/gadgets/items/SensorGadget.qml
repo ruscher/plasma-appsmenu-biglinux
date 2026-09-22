@@ -46,11 +46,28 @@ Item {
     readonly property var hidden: host.cfg.hidden || []
     readonly property var forcedOn: host.cfg.shown || []
 
-    /*  Per-core readings are hidden by default: on AMD every core reports
-        the package figure, sixteen identical rows; the average is shown
-        instead. Anyone who wants the cores can turn them on.  */
+    /*  Two things are hidden by default. Both still exist, both are listed
+        in the settings, and turning either on is one click — this is about
+        what a fresh install shows, not about what the machine has.
+
+        Per-core readings: on AMD every core reports the package figure,
+        sixteen identical rows, so the average stands for them.
+
+        A Super I/O chip's auxiliary thermistor inputs: boards wire one or
+        two of them and leave the rest floating, and a floating input reads
+        a fixed nonsense value rather than nothing at all. This machine is
+        a plain example — AUXTIN0 79 °C, AUXTIN1 90 °C, AUXTIN3 −23 °C,
+        with the room at 23 °C. Left visible they would put a card whose
+        hardware is perfectly cool into "extremely high temperature", which
+        is worse than not showing a reading nobody can interpret. The named
+        inputs the board really uses (SYSTIN, CPUTIN and the like) are not
+        touched.  */
     function defaultHidden(id) {
-        return /^cpu\/cpu\d+\//.test(id) || /^cpu\/all\/(maximum|minimum)Temperature$/.test(id)
+        if (/^cpu\/cpu\d+\//.test(id) || /^cpu\/all\/(maximum|minimum)Temperature$/.test(id)) {
+            return true
+        }
+        const s = all.find(x => x.id === id)
+        return !!s && /^AUXTIN/i.test(s.name)
     }
     function isShown(id) {
         if (forcedOn.indexOf(id) !== -1) return true
@@ -334,6 +351,11 @@ Item {
                         host.saveCfg(Object.assign({}, host.cfg, { hidden: hid, shown: on }))
                     }
                 }
+            }
+            PC3.Label {
+                visible: sensor.all.some(s => /^AUXTIN/i.test(s.name))
+                text: i18n("The board's spare thermistor inputs (AUXTIN) start hidden: the ones no cable is attached to report a fixed, meaningless figure.")
+                opacity: 0.6; wrapMode: Text.Wrap; font.pointSize: Kirigami.Theme.smallFont.pointSize; Layout.fillWidth: true
             }
             PC3.Label {
                 visible: sensor.all.length === 0
