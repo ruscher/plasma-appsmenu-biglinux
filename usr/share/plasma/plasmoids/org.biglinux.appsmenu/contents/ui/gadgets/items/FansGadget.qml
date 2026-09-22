@@ -3,17 +3,22 @@
     SPDX-License-Identifier: GPL-2.0-or-later
 
     Fans — every fan the machine reports, with its speed. A fan that turns
-    is drawn turning; one at 0 RPM stands still.
+    is drawn turning; one at 0 RPM stands still; one that has not answered
+    yet says so instead of pretending to be stopped.
 
-    The spin is one shared angle advanced by a single timer at about 12
+    Which fans exist is decided by the sensor's unit (RPM), never by its
+    name — see SensorCatalog. Values come through SensorSubscription, which
+    is where the "no values until you open Configure" bug was fixed.
+
+    The spin is one shared angle advanced by a single timer at about twelve
     frames a second, applied to each icon scaled by its speed, and it runs
     only while the card is on screen, only while some fan is actually
     turning, only if animations are on for the system, and only if the user
     has not switched it off. That keeps it far from the per-item 60 fps
     loops the edit mode used to have.
 
-    Names are KSystemStats' own; nothing is guessed. The technical id is in
-    the tooltip. cfg: { hidden: [ids], animate: bool }
+    Names are KSystemStats' own; nothing is guessed. cfg: { hidden: [ids],
+    animate: bool }
 */
 
 import QtQuick 2.15
@@ -21,7 +26,6 @@ import QtQuick.Layouts 1.15
 import QtQuick.Controls 2.15 as QQC2
 import org.kde.plasma.components 3.0 as PC3
 import org.kde.kirigami 2.20 as Kirigami
-import org.kde.ksysguard.sensors as Sensors
 import ".." as G
 
 Item {
@@ -29,43 +33,45 @@ Item {
     required property var host
 
     readonly property bool compact: host.compact
+    /*  As in Sensor: a short card drops the second line rather than
+        showing half as many fans. */
+    readonly property bool tight: compact || height < Kirigami.Units.gridUnit * 10
     readonly property var all: G.SensorCatalog.fans
     readonly property var hidden: host.cfg.hidden || []
     readonly property bool animate: host.cfg.animate !== false
     readonly property var shown: all.filter(f => hidden.indexOf(f.id) === -1)
     readonly property var shownIds: shown.map(f => f.id)
+    readonly property bool multipleGroups: {
+        const g = {}
+        for (const f of shown) g[f.group] = true
+        return Object.keys(g).length > 1
+    }
 
     Component.onCompleted: {
         host.accentColor = "#0ea5e9"
         host.settingsComponent = settings
     }
 
-    property var values: ({})
-    Sensors.SensorDataModel {
+    G.SensorSubscription {
         id: live
-        sensors: fans.shownIds
-        enabled: fans.host.active && fans.shownIds.length > 0
-        updateRateLimit: 2000
-        onDataChanged: fans.pull()
-        onSensorsChanged: fans.pull()
+        ids: fans.shownIds
+        active: fans.host.active
     }
-    function pull() {
-        const v = {}
-        for (let c = 0; c < live.columnCount(); c++) {
-            const idx = live.index(0, c)
-            const id = String(live.data(idx, Sensors.SensorDataModel.SensorId) || "")
-            const val = live.data(idx, Sensors.SensorDataModel.Value)
-            if (id.length && val !== undefined && val !== null && !isNaN(Number(val))) v[id] = Number(val)
-        }
-        values = v
+
+    /*  −1 means "no reading yet", which is not the same as a fan that is
+        stopped; 0 is a real, useful answer. */
+    function rpmOf(id) {
+        const v = live.values[id]
+        return v === undefined ? -1 : Math.max(0, Math.round(v))
     }
-    function rpmOf(id) { const v = values[id]; return v === undefined ? -1 : Math.max(0, Math.round(v)) }
     readonly property int spinning: shown.filter(f => rpmOf(f.id) > 0).length
+    readonly property int reading: shown.filter(f => rpmOf(f.id) >= 0).length
 
     Binding {
         target: fans.host
         property: "subtitle"
         value: !G.SensorCatalog.ready || fans.shown.length === 0 ? ""
+             : fans.reading === 0 ? i18nc("@info:status no fan has reported a speed yet", "Waiting for readings")
              : i18ncp("@info:status how many fans are turning", "%1 fan turning", "%1 fans turning", fans.spinning)
     }
 
@@ -85,77 +91,134 @@ Item {
         const top = f.max > 0 ? f.max : 2000
         return 0.35 + 0.65 * Math.min(1, rpm / top)
     }
+    function fraction(f) {
+        const rpm = rpmOf(f.id)
+        const top = f.max > 0 ? f.max : 2000
+        return rpm <= 0 ? 0 : Math.max(0.02, Math.min(1, rpm / top))
+    }
+    function rpmText(rpm) {
+        return rpm < 0 ? "—"
+             : rpm === 0 ? i18nc("@info a fan that is not turning", "0 RPM")
+             : i18nc("@info fan speed", "%1 RPM", rpm.toLocaleString(Qt.locale(), "f", 0))
+    }
 
     ListView {
         id: list
         anchors.fill: parent
         clip: true
         model: fans.shown
-        spacing: fans.compact ? 1 : 3
+        spacing: Kirigami.Units.smallSpacing
         boundsBehavior: Flickable.StopAtBounds
         flickableDirection: Flickable.VerticalFlick
         reuseItems: true
         visible: fans.shown.length > 0
+
         QQC2.ScrollBar.vertical: PC3.ScrollBar {
+            id: bar
             policy: list.contentHeight > list.height ? QQC2.ScrollBar.AsNeeded : QQC2.ScrollBar.AlwaysOff
         }
+        /*  The bar floats over the content, and these rows end in a
+            right-aligned number; leave it room rather than let it sit on
+            top of the reading. */
+        readonly property real inset: bar.policy === QQC2.ScrollBar.AsNeeded ? Kirigami.Units.gridUnit * 0.7 : 0
 
-        delegate: Item {
+        section.property: fans.multipleGroups ? "group" : ""
+        section.criteria: ViewSection.FullString
+        section.delegate: PC3.Label {
+            required property string section
+            width: list.width
+            text: section
+            font.pointSize: Kirigami.Theme.smallFont.pointSize * 0.85
+            font.weight: Font.DemiBold
+            opacity: 0.55
+            elide: Text.ElideRight
+            topPadding: fans.tight ? 1 : Kirigami.Units.smallSpacing
+            Accessible.role: Accessible.Heading
+        }
+
+        delegate: ColumnLayout {
             id: row
             required property var modelData
             readonly property int rpm: fans.rpmOf(modelData.id)
             readonly property bool turning: rpm > 0
-            width: list.width
-            height: fans.compact ? Kirigami.Units.gridUnit * 1.35 : Kirigami.Units.gridUnit * 1.9
+            readonly property bool waiting: rpm < 0
+
+            width: list.width - list.inset
+            spacing: 2
 
             RowLayout {
-                anchors.fill: parent
+                Layout.fillWidth: true
                 spacing: Kirigami.Units.smallSpacing
 
                 Kirigami.Icon {
                     source: Qt.resolvedUrl("../icons/fan-symbolic.svg")
                     isMask: true
-                    color: row.turning ? fans.host.accent : Kirigami.Theme.disabledTextColor
-                    Layout.preferredWidth: fans.compact ? Kirigami.Units.iconSizes.small : Kirigami.Units.iconSizes.smallMedium
-                    Layout.preferredHeight: Layout.preferredWidth
+                    color: row.turning ? fans.host.accent : Kirigami.Theme.textColor
+                    opacity: row.turning ? 1 : (row.waiting ? 0.4 : 0.6)
+                    Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                    Layout.preferredHeight: Kirigami.Units.iconSizes.small
                     rotation: row.turning && fans.animate ? fans.angle * fans.spinFactor(row.modelData) : 0
                     Accessible.ignored: true
                 }
-                ColumnLayout {
+
+                PC3.Label {
+                    text: row.modelData.shortName
+                    font.weight: Font.DemiBold
+                    font.pointSize: Kirigami.Theme.smallFont.pointSize
+                    elide: Text.ElideRight
                     Layout.fillWidth: true
                     Layout.minimumWidth: 0
-                    spacing: 0
-                    PC3.Label {
-                        text: row.modelData.shortName
-                        font.pointSize: Kirigami.Theme.smallFont.pointSize
-                        font.weight: Font.DemiBold
-                        elide: Text.ElideRight
-                        Layout.fillWidth: true
-                    }
-                    PC3.Label {
-                        visible: !fans.compact
-                        text: row.modelData.group
-                        font.pointSize: Kirigami.Theme.smallFont.pointSize * 0.85
-                        opacity: 0.55
-                        elide: Text.ElideRight
-                        Layout.fillWidth: true
-                    }
                 }
+
                 PC3.Label {
-                    text: row.rpm < 0 ? "—"
-                        : (row.turning ? i18nc("@info fan speed", "%1 RPM", row.rpm.toLocaleString(Qt.locale(), "f", 0))
-                                       : i18nc("@info a fan that is not turning", "0 RPM"))
+                    text: fans.rpmText(row.rpm)
                     font.pointSize: Kirigami.Theme.smallFont.pointSize
+                    font.weight: Font.DemiBold
                     font.family: "monospace"
-                    opacity: row.turning ? 1 : 0.55
+                    opacity: row.turning ? 1 : 0.6
                 }
             }
+
+            /*  Where the fan is, in words — the card it belongs to, or the
+                chip that reports it. */
+            PC3.Label {
+                visible: !fans.tight
+                text: row.waiting
+                    ? i18nc("@info a fan that has not reported a speed yet", "Waiting for a reading")
+                    : row.modelData.group
+                font.pointSize: Kirigami.Theme.smallFont.pointSize
+                opacity: 0.7
+                elide: Text.ElideRight
+                Layout.fillWidth: true
+            }
+
+            /*  Only when the hardware says what full speed is; otherwise a
+                bar would be inventing a scale. */
+            Rectangle {
+                visible: row.modelData.max > 0
+                Layout.fillWidth: true
+                Layout.preferredHeight: Math.round(Kirigami.Units.smallSpacing * 0.8)
+                radius: height / 2
+                color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.12)
+
+                Rectangle {
+                    width: row.turning ? Math.max(2, parent.width * fans.fraction(row.modelData)) : 0
+                    height: parent.height
+                    radius: parent.radius
+                    color: fans.host.accent
+                    Behavior on width { enabled: Kirigami.Units.longDuration > 0; NumberAnimation { duration: Kirigami.Units.longDuration } }
+                }
+            }
+
             PC3.ToolTip.text: row.modelData.name + "\n" + row.modelData.id
+                + (row.modelData.max > 0 ? "\n" + i18nc("@info:tooltip the speed the hardware reports as its maximum", "Maximum: %1", fans.rpmText(row.modelData.max)) : "")
             PC3.ToolTip.visible: rowHover.hovered
             PC3.ToolTip.delay: Kirigami.Units.toolTipDelay
             HoverHandler { id: rowHover }
+
             Accessible.role: Accessible.ListItem
-            Accessible.name: row.rpm < 0 ? row.modelData.name
+            Accessible.name: row.waiting
+                ? i18nc("@info accessible fan row with no reading", "%1, waiting for a reading", row.modelData.name)
                 : (row.turning ? i18nc("@info accessible fan row", "%1, %2 RPM", row.modelData.name, row.rpm)
                                : i18nc("@info accessible fan row", "%1, stopped", row.modelData.name))
         }
@@ -163,9 +226,10 @@ Item {
 
     ColumnLayout {
         anchors.centerIn: parent
-        width: parent.width
+        width: parent.width - Kirigami.Units.largeSpacing * 2
         visible: G.SensorCatalog.ready && fans.shown.length === 0
         spacing: Kirigami.Units.smallSpacing
+
         Kirigami.Icon {
             source: Qt.resolvedUrl("../icons/fan-symbolic.svg")
             isMask: true
@@ -183,6 +247,7 @@ Item {
             Layout.fillWidth: true
         }
     }
+
     PC3.BusyIndicator {
         anchors.centerIn: parent
         running: !G.SensorCatalog.ready && fans.host.active
@@ -211,7 +276,7 @@ Item {
             }
             PC3.Label {
                 visible: fans.all.length === 0
-                text: i18n("No fan sensors were found on this computer.")
+                text: i18n("No fan sensors were found on this computer. Motherboard fans need a driver for the board's sensor chip, which this system does not load.")
                 opacity: 0.6; wrapMode: Text.Wrap; font.pointSize: Kirigami.Theme.smallFont.pointSize; Layout.fillWidth: true
             }
             QQC2.CheckBox {

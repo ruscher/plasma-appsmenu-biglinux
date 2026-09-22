@@ -17,6 +17,7 @@ import QtQuick.Controls 2.15 as QQC2
 import org.kde.plasma.components 3.0 as PC3
 import org.kde.kirigami 2.20 as Kirigami
 import org.kde.notification as KNotification
+import org.kde.plasma.plasma5support 2.0 as P5Support
 
 Item {
     id: cd
@@ -32,9 +33,13 @@ Item {
         host.accentColor = "#a855f7"
         host.settingsComponent = settings
     }
-    Timer { interval: 1000; running: cd.host.active && cd.next !== null; repeat: true; triggeredOnStart: true; onTriggered: cd.tick() }
+    /*  `pageActive`, not `active`: the card is frequently scrolled out of
+        view on a board with many gadgets, and a countdown that stops
+        counting because you scrolled past it never rings. It still counts
+        only while the menu is open — this is not a background service. */
+    Timer { interval: 1000; running: cd.host.pageActive && cd.next !== null; repeat: true; triggeredOnStart: true; onTriggered: cd.tick() }
     // Also catch timers that elapsed while the menu was closed
-    Connections { target: cd.host; function onActiveChanged() { if (cd.host.active) cd.tick() } }
+    Connections { target: cd.host; function onPageActiveChanged() { if (cd.host.pageActive) cd.tick() } }
 
     function tick() {
         now = new Date()
@@ -100,7 +105,31 @@ Item {
         saveEvents((host.cfg.events || []).map(e => sameEvent(e, ev) ? Object.assign({}, e, { acked: true }) : e))
     }
 
+    /*  Plasma's Do Not Disturb suppresses every popup while it is on, and
+        a countdown that rings into a suppressed popup looks broken. The
+        gadget does not override the setting — it is the user's — but it
+        does say so, on the card and in the settings, so the silence is
+        explained rather than mysterious.
+
+        Read on demand: when an alarm goes off, and when the settings are
+        opened. Never on a timer. The command is a fixed string. */
+    property bool notificationsPaused: false
+    P5Support.DataSource {
+        id: dnd
+        engine: "executable"
+        onNewData: (source, data) => {
+            disconnectSource(source)
+            cd.notificationsPaused = String(data["stdout"] || "").indexOf("true") !== -1
+        }
+    }
+    function checkNotificationsPaused() {
+        const cmd = "busctl --user get-property org.freedesktop.Notifications /org/freedesktop/Notifications org.freedesktop.Notifications Inhibited"
+        dnd.disconnectSource(cmd)
+        dnd.connectSource(cmd)
+    }
+
     function fire(ev) {
+        checkNotificationsPaused()
         // mark first so it never fires twice
         saveEvents((host.cfg.events || []).map(e => sameEvent(e, ev) ? Object.assign({}, e, { fired: true, firedAt: Date.now() }) : e))
         const started = ev.created ? new Date(ev.created) : null
@@ -189,6 +218,20 @@ Item {
         id: mainCol
         anchors.fill: parent
         spacing: 2
+
+        /*  Shown only while something is actually ringing and the desktop
+            is suppressing popups: the alarm is working, the popup is not
+            going to appear, and that is a setting rather than a fault. */
+        PC3.Label {
+            visible: cd.ringingEvents.length > 0 && cd.notificationsPaused
+            text: i18n("Do Not Disturb is on — the pop-up is hidden.")
+            font.pointSize: Kirigami.Theme.smallFont.pointSize
+            color: Kirigami.Theme.neutralTextColor
+            wrapMode: Text.Wrap
+            elide: Text.ElideRight
+            maximumLineCount: 2
+            Layout.fillWidth: true
+        }
 
         // Big countdown of the next event
         ColumnLayout {
@@ -352,6 +395,7 @@ Item {
     Component {
         id: settings
         ColumnLayout {
+            Component.onCompleted: cd.checkNotificationsPaused()
             id: se
             property var host
             spacing: Kirigami.Units.largeSpacing

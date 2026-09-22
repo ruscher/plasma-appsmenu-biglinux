@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    SPDX-FileCopyrightText: 2026 BigLinux Team
+    SPDX-License-Identifier: GPL-2.0-or-later
+
+    Processor, symbolic. Breeze has no cpu-symbolic: its only processor
+    glyphs are the 64 px coloured `cpu` and the `preferences-devices-cpu`
+    settings icon, neither of which belongs in a 16 px row.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+  <g fill="currentColor">
+    <path d="M5 1h1v2H5zm2.5 0h1v2h-1zM10 1h1v2h-1zM5 13h1v2H5zm2.5 0h1v2h-1zM10 13h1v2h-1zM1 5h2v1H1zm0 2.5h2v1H1zM1 10h2v1H1zm12-5h2v1h-2zm0 2.5h2v1h-2zm0 2.5h2v1h-2z"/>
+    <path d="M3.5 3A.5.5 0 0 0 3 3.5v9a.5.5 0 0 0 .5.5h9a.5.5 0 0 0 .5-.5v-9a.5.5 0 0 0-.5-.5zM4 4h8v8H4z"/>
+    <rect x="6" y="6" width="4" height="4" rx=".4"/>
+  </g>
+</svg>

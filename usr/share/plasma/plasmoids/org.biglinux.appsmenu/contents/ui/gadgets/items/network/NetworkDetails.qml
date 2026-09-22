@@ -59,12 +59,70 @@ Item {
 
     PlasmaNM.NetworkModel { id: nm }
 
+    /*  plasma-nm's ConnectionDetailsModel does not publish role *names* to
+        QML: in a delegate, `model.DetailLabel` and its siblings are all
+        `undefined`, which is why this panel showed a correct heading over
+        fourteen blank rows. The values are there — the model answers to the
+        numeric roles below, which are `Qt::UserRole + 1…4` in the order
+        plasma-nm declares them. Read once into plain objects rather than
+        role-hunting in every delegate.  */
+    readonly property int roleIsSection: 257
+    readonly property int roleSectionTitle: 258
+    readonly property int roleDetailLabel: 259
+    readonly property int roleDetailValue: 260
+
+    property var rowsData
+    readonly property var detailRows: rowsData !== undefined ? rowsData : []
+    /*  True when the model has rows but none of them carries a label or a
+        value: plasma-nm changed its roles and this file needs updating.
+        Better to say so than to show a panel of empty lines. */
+    readonly property bool rolesUnreadable: detailsModel && detailsModel.rowCount() > 0 && detailRows.length === 0
+
+    function rebuildRows() {
+        const m = detailsModel
+        const out = []
+        if (m) {
+            for (let r = 0; r < m.rowCount(); r++) {
+                const i = m.index(r, 0)
+                const section = m.data(i, roleIsSection) === true
+                const title = String(m.data(i, roleSectionTitle) || "")
+                const label = String(m.data(i, roleDetailLabel) || "")
+                const value = String(m.data(i, roleDetailValue) || "")
+                if (section ? !title.length : !(label.length || value.length)) {
+                    continue
+                }
+                out.push({ section: section, title: title, label: label, value: value })
+            }
+        }
+        rowsData = out
+    }
+    onDetailsModelChanged: rebuildRows()
+    Connections {
+        target: details.detailsModel
+        ignoreUnknownSignals: true
+        function onDataChanged() { details.rebuildRows() }
+        function onRowsInserted() { details.rebuildRows() }
+        function onRowsRemoved() { details.rebuildRows() }
+        function onModelReset() { details.rebuildRows() }
+    }
+
     /*  Row indices of activated, non-loopback, non-VPN connections. */
     property var candidates: []
     property var vpns: []
     property int primaryRow: -1
     /*  Settings path of NM's PrimaryConnection, when it had to be asked. */
     property string primaryPath: ""
+
+    /*  A fingerprint of the active set, so that the constant `dataChanged`
+        traffic from the model (rates, signal levels) does not keep throwing
+        away an answer D-Bus already gave us. */
+    property string candidateKey: ""
+
+    /*  When the primary has to be guessed, a real uplink beats a container
+        bridge or a tunnel — this machine has three Docker bridges active
+        and any of them could otherwise have been picked. */
+    readonly property var uplinkFirst: ({ 13: 0, 14: 0, 5: 1, 6: 1, 19: 8, 11: 8, 4: 9, 17: 9, 10: 9, 3: 9, 15: 9 })
+    function uplinkRank(type) { return uplinkFirst[type] !== undefined ? uplinkFirst[type] : 5 }
 
     function rescan() {
         const cands = [], vpn = []
@@ -76,8 +134,17 @@ Item {
             if (isVpn(type)) { vpn.push(i); continue }
             cands.push(i)
         }
+        cands.sort((a, b) => uplinkRank(nm.data(nm.index(a, 0), PlasmaNM.NetworkModel.TypeRole))
+                            - uplinkRank(nm.data(nm.index(b, 0), PlasmaNM.NetworkModel.TypeRole)))
         candidates = cands
         vpns = vpn
+
+        const key = cands.map(i => String(nm.data(nm.index(i, 0), PlasmaNM.NetworkModel.ConnectionPathRole))).join("|")
+        if (key !== candidateKey) {
+            candidateKey = key
+            primaryPath = ""
+        }
+
         if (cands.length <= 1) {
             primaryRow = cands.length ? cands[0] : -1
         } else if (primaryPath.length) {
@@ -127,7 +194,7 @@ Item {
     }
     /*  The model emits bursts of changes while a connection comes up;
         one rescan after the burst is enough.  */
-    Timer { id: rescanTimer; interval: 400; onTriggered: { details.primaryPath = ""; details.rescan() } }
+    Timer { id: rescanTimer; interval: 400; onTriggered: details.rescan() }
     Component.onCompleted: rescanTimer.start()
 
     readonly property var primaryIndex: primaryRow >= 0 ? nm.index(primaryRow, 0) : null
@@ -184,7 +251,7 @@ Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
-            model: details.detailsModel
+            model: details.detailRows
             spacing: 0
             boundsBehavior: Flickable.StopAtBounds
             flickableDirection: Flickable.VerticalFlick
@@ -194,10 +261,10 @@ Item {
 
             delegate: Item {
                 id: row
-                required property var model
-                readonly property bool isSection: model.IsSection === true
-                readonly property string label: isSection ? String(model.SectionTitle || "") : String(model.DetailLabel || "")
-                readonly property string value: isSection ? "" : String(model.DetailValue || "")
+                required property var modelData
+                readonly property bool isSection: modelData.section
+                readonly property string label: isSection ? modelData.title : modelData.label
+                readonly property string value: isSection ? "" : modelData.value
                 readonly property bool canCopy: !isSection && details.copyable(value)
                 width: rows.width
                 implicitHeight: isSection ? sectionLabel.implicitHeight + Kirigami.Units.smallSpacing * 1.5
@@ -257,10 +324,15 @@ Item {
         }
 
         PC3.Label {
-            visible: details.primaryRow < 0
+            visible: details.primaryRow < 0 || details.rolesUnreadable
             Layout.fillWidth: true
             Layout.fillHeight: true
-            text: i18n("Not connected")
+            /*  The second case is plasma-nm having changed the numeric roles
+                this file reads. Saying so beats a panel of blank lines,
+                which is exactly how that failure looked before. */
+            text: details.rolesUnreadable
+                ? i18n("This version of the network service reports its details in a way this gadget does not understand.")
+                : i18n("Not connected")
             opacity: 0.6
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter

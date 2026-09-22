@@ -43,6 +43,14 @@ Item {
     readonly property bool editing: grid.editing
     // Gadgets should pause timers/network while inactive.
     readonly property bool active: grid.active && inViewport && !dragging
+    /*  True while the page itself is on screen, whether or not this card is
+        scrolled into view. Almost every gadget wants `active`, which also
+        waits for the card to be visible — polling a sensor nobody can see
+        is waste. A gadget that must keep *counting* while the user looks at
+        another part of the page uses this instead: a countdown that only
+        runs while you happen to be looking at it is a countdown that never
+        goes off. Nothing here runs while the menu is closed either way. */
+    readonly property bool pageActive: grid.active && !dragging
     property bool inViewport: true
     readonly property bool hovered: hoverHandler.hovered
 

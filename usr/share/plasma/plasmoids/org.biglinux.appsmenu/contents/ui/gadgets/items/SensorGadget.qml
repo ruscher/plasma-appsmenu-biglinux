@@ -2,15 +2,24 @@
     SPDX-FileCopyrightText: 2026 BigLinux Team
     SPDX-License-Identifier: GPL-2.0-or-later
 
-    Sensor — every temperature the machine reports, as small thermometers
-    with a plain-language status. Discovery is shared (SensorCatalog); this
-    gadget subscribes only to the sensors it shows, and only while on screen.
+    Sensor — every temperature the machine reports, grouped by the hardware
+    it belongs to, each with the kind of device it is, its reading, a plain
+    verdict and a bar. The visual language is Drive Info's: an icon, a name,
+    a line of detail and a thin bar, so the two cards read as one product.
+
+    Discovery is shared (SensorCatalog) and classifies by unit, never by
+    name. Subscription goes through SensorSubscription, which is where the
+    "no values until you open Configure" bug was fixed — see the note in
+    that file.
+
+    A sensor that has not answered yet keeps its row and says so. It is not
+    removed, because "no reading this second" and "this hardware is gone"
+    are different things and only the second should change the list.
 
     Thresholds: when KSystemStats carries the hardware's own critical limit
     (`max`), that limit is used and the lower bands are derived from it.
     Otherwise conservative defaults per kind of hardware apply — a 70 °C
-    NVMe is not a 70 °C hard disk. Both are documented in
-    docs/gadgets-stage2/08-sensor-gadget.md.
+    NVMe is not a 70 °C hard disk.
 
     cfg: { hidden: [ids the user turned off], shown: [default-hidden ids the
     user turned on] } — two lists so that new hardware appears by default
@@ -22,7 +31,6 @@ import QtQuick.Layouts 1.15
 import QtQuick.Controls 2.15 as QQC2
 import org.kde.plasma.components 3.0 as PC3
 import org.kde.kirigami 2.20 as Kirigami
-import org.kde.ksysguard.sensors as Sensors
 import ".." as G
 
 Item {
@@ -30,15 +38,36 @@ Item {
     required property var host
 
     readonly property bool compact: host.compact
+    /*  A short card drops the verdict line even when it is not 1x1: on a
+        2x1 that third line costs half the rows the card could show, and
+        the verdict is still in the tooltip and the accessible name. */
+    readonly property bool tight: compact || height < Kirigami.Units.gridUnit * 10
     readonly property var all: G.SensorCatalog.temperatures
     readonly property var hidden: host.cfg.hidden || []
     readonly property var forcedOn: host.cfg.shown || []
 
-    /*  Per-core readings are hidden by default: on AMD every core reports
-        the package figure, sixteen identical rows; the average is shown
-        instead. Anyone who wants the cores can turn them on.  */
+    /*  Two things are hidden by default. Both still exist, both are listed
+        in the settings, and turning either on is one click — this is about
+        what a fresh install shows, not about what the machine has.
+
+        Per-core readings: on AMD every core reports the package figure,
+        sixteen identical rows, so the average stands for them.
+
+        A Super I/O chip's auxiliary thermistor inputs: boards wire one or
+        two of them and leave the rest floating, and a floating input reads
+        a fixed nonsense value rather than nothing at all. This machine is
+        a plain example — AUXTIN0 79 °C, AUXTIN1 90 °C, AUXTIN3 −23 °C,
+        with the room at 23 °C. Left visible they would put a card whose
+        hardware is perfectly cool into "extremely high temperature", which
+        is worse than not showing a reading nobody can interpret. The named
+        inputs the board really uses (SYSTIN, CPUTIN and the like) are not
+        touched.  */
     function defaultHidden(id) {
-        return /^cpu\/cpu\d+\//.test(id) || /^cpu\/all\/(maximum|minimum)Temperature$/.test(id)
+        if (/^cpu\/cpu\d+\//.test(id) || /^cpu\/all\/(maximum|minimum)Temperature$/.test(id)) {
+            return true
+        }
+        const s = all.find(x => x.id === id)
+        return !!s && /^AUXTIN/i.test(s.name)
     }
     function isShown(id) {
         if (forcedOn.indexOf(id) !== -1) return true
@@ -47,33 +76,21 @@ Item {
     }
     readonly property var shown: all.filter(s => isShown(s.id))
     readonly property var shownIds: shown.map(s => s.id)
+    readonly property bool multipleGroups: {
+        const g = {}
+        for (const s of shown) g[s.group] = true
+        return Object.keys(g).length > 1
+    }
 
     Component.onCompleted: {
         host.accentColor = "#f43f5e"
         host.settingsComponent = settings
     }
 
-    // ── live values: one subscription for all shown sensors ──
-    property var values: ({})
-    Sensors.SensorDataModel {
+    G.SensorSubscription {
         id: live
-        sensors: sensor.shownIds
-        enabled: sensor.host.active && sensor.shownIds.length > 0
-        updateRateLimit: 2000
-        onDataChanged: sensor.pull()
-        onSensorsChanged: sensor.pull()
-    }
-    function pull() {
-        const v = {}
-        for (let c = 0; c < live.columnCount(); c++) {
-            const idx = live.index(0, c)
-            const id = String(live.data(idx, Sensors.SensorDataModel.SensorId) || "")
-            const val = live.data(idx, Sensors.SensorDataModel.Value)
-            if (id.length && val !== undefined && val !== null && !isNaN(Number(val))) {
-                v[id] = Number(val)
-            }
-        }
-        values = v
+        ids: sensor.shownIds
+        active: sensor.host.active
     }
 
     // ── thresholds ──
@@ -98,7 +115,7 @@ Item {
         }
         return { cool: d.cool, normal: d.normal, warm: d.warm, hot: d.hot, crit: d.hot + 10 }
     }
-    /*  0 cold · 1 cool · 2 fine · 3 warm · 4 hot · 5 critical */
+    /*  0 cold · 1 cool · 2 fine · 3 warm · 4 hot · 5 critical, −1 unknown */
     function band(v, l) {
         if (v === undefined) return -1
         if (v < l.cool - 15) return 0
@@ -109,9 +126,6 @@ Item {
         return 5
     }
     readonly property var bandColours: ["#3b82f6", "#38bdf8", Kirigami.Theme.positiveTextColor, "#eab308", "#f97316", Kirigami.Theme.negativeTextColor]
-    /*  Drawn as masks so the glyph takes the band colour rather than the
-        theme's own status colouring.  */
-    readonly property var bandIcons: ["temperature-cold-symbolic", "temperature-cold-symbolic", "temperature-normal-symbolic", "temperature-warm-symbolic", "dialog-warning-symbolic", "dialog-warning-symbolic"]
     function bandText(b) {
         switch (b) {
         case 0: return i18nc("@info temperature status", "Cold")
@@ -121,16 +135,19 @@ Item {
         case 4: return i18nc("@info temperature status", "Caution: high temperature")
         case 5: return i18nc("@info temperature status", "Caution: extremely high temperature")
         }
-        return ""
+        return i18nc("@info a sensor that has not reported a reading yet", "Waiting for a reading")
     }
-    /*  The same verdicts cut down to what a 1x1 title bar can show.  */
+    /*  The same verdicts cut down to what a row or a 1x1 title bar shows. */
     function shortBandText(b) {
         switch (b) {
+        case 0: return i18nc("@info short temperature status", "Cold")
+        case 1: return i18nc("@info short temperature status", "Cool")
+        case 2: return i18nc("@info short temperature status", "Normal")
         case 3: return i18nc("@info short temperature status", "Moderately high")
         case 4: return i18nc("@info short temperature status", "High temperature")
         case 5: return i18nc("@info short temperature status", "Extremely high")
         }
-        return bandText(b)
+        return i18nc("@info a sensor that has not reported a reading yet", "No reading yet")
     }
     function fraction(v, l) {
         const lo = l.cool - 20, hi = l.crit
@@ -141,11 +158,12 @@ Item {
     readonly property int worstBand: {
         let w = -1
         for (const s of shown) {
-            const b = band(values[s.id], limits(s))
+            const b = band(live.values[s.id], limits(s))
             if (b > w) w = b
         }
         return w
     }
+
     Binding {
         target: sensor.host
         property: "subtitle"
@@ -159,16 +177,23 @@ Item {
         anchors.fill: parent
         clip: true
         model: sensor.shown
-        spacing: sensor.compact ? 1 : 2
+        spacing: Kirigami.Units.smallSpacing
         boundsBehavior: Flickable.StopAtBounds
         flickableDirection: Flickable.VerticalFlick
         reuseItems: true
         visible: sensor.shown.length > 0
+
         QQC2.ScrollBar.vertical: PC3.ScrollBar {
+            id: bar
             policy: list.contentHeight > list.height ? QQC2.ScrollBar.AsNeeded : QQC2.ScrollBar.AlwaysOff
         }
+        /*  The bar floats over the content, and these rows end in a
+            right-aligned number; leave it room rather than let it sit on
+            top of the reading. */
+        readonly property real inset: bar.policy === QQC2.ScrollBar.AsNeeded ? Kirigami.Units.gridUnit * 0.7 : 0
 
-        section.property: "group"
+        /*  Grouping only earns its line when there is more than one group. */
+        section.property: sensor.multipleGroups ? "group" : ""
         section.criteria: ViewSection.FullString
         section.delegate: PC3.Label {
             required property string section
@@ -178,109 +203,116 @@ Item {
             font.weight: Font.DemiBold
             opacity: 0.55
             elide: Text.ElideRight
-            topPadding: sensor.compact ? 1 : 3
+            topPadding: sensor.tight ? 1 : Kirigami.Units.smallSpacing
             Accessible.role: Accessible.Heading
         }
 
-        delegate: Item {
+        delegate: ColumnLayout {
             id: row
             required property var modelData
             readonly property var lim: sensor.limits(modelData)
-            readonly property var value: sensor.values[modelData.id]
+            readonly property var value: live.values[modelData.id]
+            readonly property bool waiting: value === undefined
             readonly property int b: sensor.band(value, lim)
             readonly property color tone: b >= 0 ? sensor.bandColours[b] : Kirigami.Theme.disabledTextColor
-            width: list.width
-            height: sensor.compact ? Kirigami.Units.gridUnit * 1.45 : Kirigami.Units.gridUnit * 1.5
 
-            /*  Two shapes from one layout: a single line when there is room,
-                and on a 1x1 card the name and value above the bar, so the
-                name gets the whole width instead of a third of it.  */
-            GridLayout {
-                anchors.fill: parent
-                columns: sensor.compact ? 2 : 4
-                columnSpacing: Kirigami.Units.smallSpacing
-                rowSpacing: 1
+            width: list.width - list.inset
+            spacing: 2
 
-                /*  The band glyph goes first when the row is a single line;
-                    on a 1x1 card the band still shows in the bar colour, the
-                    tooltip and the accessible name.  */
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: Kirigami.Units.smallSpacing
+
                 Kirigami.Icon {
-                    visible: !sensor.compact
-                    source: row.b >= 0 ? sensor.bandIcons[row.b] : "temperature-normal-symbolic"
-                    fallback: "temperature-normal"
+                    source: G.SensorCatalog.iconFor(row.modelData.category)
+                    fallback: "computer-symbolic"
                     isMask: true
-                    color: row.tone
-                    Layout.row: 0
-                    Layout.column: 0
+                    color: Kirigami.Theme.textColor
+                    opacity: row.waiting ? 0.45 : 0.85
                     Layout.preferredWidth: Kirigami.Units.iconSizes.small
                     Layout.preferredHeight: Kirigami.Units.iconSizes.small
                 }
+
                 PC3.Label {
                     text: row.modelData.shortName
+                    font.weight: Font.DemiBold
                     font.pointSize: Kirigami.Theme.smallFont.pointSize
                     elide: Text.ElideRight
-                    Layout.row: 0
-                    Layout.column: sensor.compact ? 0 : 1
-                    Layout.fillWidth: sensor.compact
-                    Layout.preferredWidth: sensor.compact ? -1 : row.width * 0.36
+                    Layout.fillWidth: true
                     Layout.minimumWidth: 0
                 }
-                /*  The thermometer: a track and a fill in the band's colour. */
-                Rectangle {
-                    Layout.row: sensor.compact ? 1 : 0
-                    Layout.column: sensor.compact ? 0 : 2
-                    Layout.columnSpan: sensor.compact ? 2 : 1
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: sensor.compact ? 4 : 7
-                    radius: height / 2
-                    color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.12)
-                    Rectangle {
-                        width: row.value === undefined ? 0 : parent.width * sensor.fraction(row.value, row.lim)
-                        height: parent.height
-                        radius: parent.radius
-                        color: row.tone
-                        Behavior on width { enabled: Kirigami.Units.longDuration > 0; NumberAnimation { duration: Kirigami.Units.longDuration } }
-                    }
-                }
+
                 PC3.Label {
-                    text: row.value === undefined ? "—" : sensor.formatTemp(row.value)
+                    text: row.waiting ? "—" : sensor.formatTemp(row.value)
                     font.pointSize: Kirigami.Theme.smallFont.pointSize
                     font.weight: Font.DemiBold
                     font.family: "monospace"
                     color: row.b >= 4 ? row.tone : Kirigami.Theme.textColor
-                    Layout.row: 0
-                    Layout.column: sensor.compact ? 1 : 3
-                    Layout.preferredWidth: Kirigami.Units.gridUnit * 2.3
-                    horizontalAlignment: Text.AlignRight
+                    opacity: row.waiting ? 0.5 : 1
                 }
             }
-            PC3.ToolTip.text: row.modelData.name + (row.b >= 0 ? "\n" + sensor.bandText(row.b) : "")
+
+            /*  The verdict in words, so colour is never the only channel.
+                On a 1x1 card the row is two lines and this one is dropped;
+                the tooltip and the accessible name still carry it. */
+            PC3.Label {
+                visible: !sensor.tight
+                text: row.waiting ? i18nc("@info a sensor that has not reported a reading yet", "Waiting for a reading")
+                                  : sensor.shortBandText(row.b)
+                font.pointSize: Kirigami.Theme.smallFont.pointSize
+                opacity: 0.7
+                elide: Text.ElideRight
+                Layout.fillWidth: true
+            }
+
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: Math.round(Kirigami.Units.smallSpacing * 0.8)
+                radius: height / 2
+                color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.12)
+
+                Rectangle {
+                    width: row.waiting ? 0 : Math.max(2, parent.width * sensor.fraction(row.value, row.lim))
+                    height: parent.height
+                    radius: parent.radius
+                    color: row.tone
+                    Behavior on width { enabled: Kirigami.Units.longDuration > 0; NumberAnimation { duration: Kirigami.Units.longDuration } }
+                }
+            }
+
+            PC3.ToolTip.text: row.modelData.name + "\n" + (row.waiting
+                    ? i18nc("@info a sensor that has not reported a reading yet", "Waiting for a reading")
+                    : sensor.bandText(row.b))
                 + (row.modelData.max > 0 ? "\n" + i18nc("@info:tooltip", "Critical: %1", sensor.formatTemp(row.modelData.max)) : "")
             PC3.ToolTip.visible: rowHover.hovered
             PC3.ToolTip.delay: Kirigami.Units.toolTipDelay
             HoverHandler { id: rowHover }
+
             Accessible.role: Accessible.ListItem
-            Accessible.name: row.value === undefined
-                ? row.modelData.name
+            Accessible.name: row.waiting
+                ? i18nc("@info accessible sensor row with no reading", "%1, waiting for a reading", row.modelData.name)
                 : i18nc("@info accessible sensor row: name, temperature, status", "%1, %2, %3", row.modelData.name, sensor.formatTemp(row.value), sensor.bandText(row.b))
         }
     }
 
     ColumnLayout {
         anchors.centerIn: parent
-        width: parent.width
+        width: parent.width - Kirigami.Units.largeSpacing * 2
         visible: G.SensorCatalog.ready && sensor.shown.length === 0
         spacing: Kirigami.Units.smallSpacing
+
         Kirigami.Icon {
-            source: "temperature-normal-symbolic"
-            fallback: "temperature-normal"
+            source: Qt.resolvedUrl("../icons/temperature-symbolic.svg")
+            isMask: true
             Layout.preferredWidth: Kirigami.Units.iconSizes.large
             Layout.preferredHeight: Kirigami.Units.iconSizes.large
             Layout.alignment: Qt.AlignHCenter
             opacity: 0.45
         }
         PC3.Label {
-            text: sensor.all.length === 0 ? i18n("No temperature sensors detected") : i18n("All sensors are hidden. Choose some in the settings.")
+            text: sensor.all.length === 0
+                ? i18n("No temperature sensors detected")
+                : i18n("All sensors are hidden. Choose some in the settings.")
             opacity: 0.7
             wrapMode: Text.Wrap
             horizontalAlignment: Text.AlignHCenter
@@ -288,6 +320,7 @@ Item {
             Layout.fillWidth: true
         }
     }
+
     PC3.BusyIndicator {
         anchors.centerIn: parent
         running: !G.SensorCatalog.ready && sensor.host.active
@@ -299,7 +332,7 @@ Item {
         ColumnLayout {
             property var host
             spacing: Kirigami.Units.smallSpacing
-            PC3.Label { text: i18n("Show these sensors"); font.weight: Font.DemiBold }
+            PC3.Label { text: i18n("Show these temperatures"); font.weight: Font.DemiBold }
             Repeater {
                 model: sensor.all
                 delegate: QQC2.CheckBox {
@@ -310,19 +343,23 @@ Item {
                     onToggled: {
                         const hid = (host.cfg.hidden || []).filter(x => x !== modelData.id)
                         const on = (host.cfg.shown || []).filter(x => x !== modelData.id)
-                        if (checked) { if (sensor.defaultHidden(modelData.id)) on.push(modelData.id) }
-                        else { hid.push(modelData.id) }
+                        if (checked) {
+                            if (sensor.defaultHidden(modelData.id)) on.push(modelData.id)
+                        } else {
+                            hid.push(modelData.id)
+                        }
                         host.saveCfg(Object.assign({}, host.cfg, { hidden: hid, shown: on }))
                     }
                 }
             }
             PC3.Label {
-                visible: sensor.all.length === 0
-                text: i18n("No temperature sensors were found on this computer.")
+                visible: sensor.all.some(s => /^AUXTIN/i.test(s.name))
+                text: i18n("The board's spare thermistor inputs (AUXTIN) start hidden: the ones no cable is attached to report a fixed, meaningless figure.")
                 opacity: 0.6; wrapMode: Text.Wrap; font.pointSize: Kirigami.Theme.smallFont.pointSize; Layout.fillWidth: true
             }
             PC3.Label {
-                text: i18n("Readings come from KSystemStats, the same source as System Monitor. Per-core CPU readings are off by default; they can be turned on above.")
+                visible: sensor.all.length === 0
+                text: i18n("No temperature sensors were found on this computer.")
                 opacity: 0.6; wrapMode: Text.Wrap; font.pointSize: Kirigami.Theme.smallFont.pointSize; Layout.fillWidth: true
             }
         }
