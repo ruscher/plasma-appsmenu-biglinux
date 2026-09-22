@@ -73,10 +73,10 @@ EmptyPage {
             }
             changed = true
             const cfg = Object.assign({}, it.cfg || {}, { game: "2048" })
-            /*  1x1 no longer exists for this gadget: it now carries a game
-                selector above the board. */
-            const size = (it.size === "1x1" || !it.size) ? "1x2" : it.size
-            return Object.assign({}, it, { id: "games", size: size, cfg: cfg })
+            /*  Games plays at 1x1 again, so the card keeps whatever size the
+                2048 had; an earlier build of this migration grew 1x1 to 1x2
+                and boards migrated then keep that, which is harmless. */
+            return Object.assign({}, it, { id: "games", size: it.size || "1x1", cfg: cfg })
         })
         if (changed) {
             Qt.callLater(root.saveLayoutNow)

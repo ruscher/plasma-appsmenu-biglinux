@@ -99,11 +99,10 @@ QtObject {
           sizes: ["1x1", "2x1", "2x2"], defaultSize: "1x1", source: "GalleryGadget.qml", online: false, multiple: true },
         /*  One entry for all five games. "puzzle" was the 2048-only gadget
             and is migrated to this on load, keeping its position and its high
-            score. 1x1 is gone from the sizes: a board plus a game selector
-            needs the extra row, and Sudoku asks for 2x2 on top of that.  */
+            score. Every game has a compact layout, so 1x1 is offered.  */
         { id: "games",        name: i18n("Games"),           icon: "applications-games-symbolic", iconFallback: "applications-games", category: "tools",
           description: i18n("2048, Minesweeper, Sudoku, Flow Connect and Block Puzzle"),
-          sizes: ["1x2", "2x2", "2x1"], defaultSize: "1x2", source: "GamesGadget.qml", online: false, multiple: false },
+          sizes: ["1x1", "1x2", "2x1", "2x2"], defaultSize: "1x1", source: "GamesGadget.qml", online: false, multiple: false },
     ]
 
     function byId(id) {
