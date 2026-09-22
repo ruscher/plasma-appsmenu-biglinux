@@ -23,6 +23,17 @@ QQC2.Popup {
             if (settingsItem) { settingsItem.destroy(); settingsItem = null }
             // createObject so `host` is set BEFORE any binding runs
             settingsItem = h.settingsComponent.createObject(settingsHolder, { "host": h })
+            /*  The page must be given its width explicitly. Relying on
+                `onWidthChanged` alone meant the first page ever opened got
+                one (the holder went from 0 to its width) and every page
+                after it got none, because the holder's width no longer
+                changed — leaving the content at width 0, every label
+                wrapped to one word per line, an implicit height of several
+                hundred pixels, and a dialog that collapsed to a sliver
+                around it. That is the "the settings do not fit" report. */
+            if (settingsItem) {
+                settingsItem.width = settingsHolder.width
+            }
             open()
         }
     }
@@ -51,8 +62,25 @@ QQC2.Popup {
     closePolicy: QQC2.Popup.NoAutoClose
     Keys.onEscapePressed: event => { event.accepted = true; dialog.tryClose() }
     anchors.centerIn: parent
-    width: Math.min(parent ? parent.width - Kirigami.Units.gridUnit * 3 : 500, Kirigami.Units.gridUnit * 30)
-    height: Math.min(parent ? parent.height - Kirigami.Units.gridUnit * 2 : 400, contentItem.implicitHeight + topPadding + bottomPadding)
+
+    /*  Sized from what the popup actually offers, in grid units, so the
+        dialog holds together at every interface scale. Both figures are
+        clamped: an applet that is not on screen has a parent of width 0,
+        which used to give the dialog a *negative* width, and a page with a
+        long translation must be allowed to grow and then scroll rather
+        than to spill past the edge. */
+    /*  Not `availableWidth`/`availableHeight`: Popup already declares both
+        as FINAL, and redeclaring them makes the whole type fail to load —
+        taking the Info page with it. */
+    readonly property real roomWidth: parent ? Math.max(0, parent.width - Kirigami.Units.gridUnit * 3) : Kirigami.Units.gridUnit * 25
+    readonly property real roomHeight: parent ? Math.max(0, parent.height - Kirigami.Units.gridUnit * 2) : Kirigami.Units.gridUnit * 22
+    /*  What the scrolling area may take: everything left after the title
+        row, the button row and the spacing between them. */
+    readonly property real maxScrollHeight: Math.max(Kirigami.Units.gridUnit * 8,
+        roomHeight - topPadding - bottomPadding - Kirigami.Units.gridUnit * 5)
+
+    width: Math.max(Kirigami.Units.gridUnit * 14, Math.min(roomWidth, Kirigami.Units.gridUnit * 30))
+    height: Math.min(roomHeight, contentItem.implicitHeight + topPadding + bottomPadding)
     padding: Kirigami.Units.largeSpacing
 
     onClosed: { if (settingsItem) { settingsItem.destroy(); settingsItem = null }; host = null }
@@ -104,7 +132,7 @@ QQC2.Popup {
         QQC2.ScrollView {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            Layout.preferredHeight: Math.min(settingsHolder.implicitHeight, Kirigami.Units.gridUnit * 22)
+            Layout.preferredHeight: Math.min(settingsHolder.implicitHeight, dialog.maxScrollHeight)
             clip: true
             contentWidth: availableWidth
 

@@ -26,8 +26,16 @@ Item {
     readonly property var defaultLeagues: ["4351", "4480", "4387"]
     readonly property var leagues: host.cfg.leagues && host.cfg.leagues.length ? host.cfg.leagues.map(String) : defaultLeagues
     readonly property int current: Math.max(0, Math.min(leagues.length - 1, host.cfg.current || 0))
-    readonly property string leagueId: leagues[current]
+    /*  `|| ""` because the two depend on separate config keys: saving a
+        shorter list before the index that points into it leaves one frame
+        where the lookup is undefined, and a string property cannot take
+        that. */
+    readonly property string leagueId: leagues[current] || leagues[0] || ""
     readonly property var league: Provider.leagueById(leagueId)
+    /*  Motorsport has no home side, no away side and no running score, so
+        it gets a view of its own and none of the match plumbing below
+        runs for it — including the fetches. */
+    readonly property bool isMotorsport: league.sport === "Motorsport"
     /*  How often live scores are polled while the gadget is on screen. The
         provider's free tier is modest, so 30 s is the floor offered and the
         list is deliberately short. Fixtures stay on their own slow timer.  */
@@ -137,6 +145,13 @@ Item {
     function liveKey() { return "live:" + league.sport }
     function fxKey() { return "fx:" + leagueId }
     function load() {
+        if (isMotorsport) {
+            liveEvents = []
+            fixtureEvents = []
+            host.clearError()
+            host.loading = false
+            return
+        }
         const l = host.sharedCacheGet(liveKey()), f = host.sharedCacheGet(fxKey())
         liveEvents = l && l.v ? l.v.filter(e => e.leagueId === leagueId) : []
         fixtureEvents = f && f.v ? f.v : []
@@ -144,6 +159,9 @@ Item {
         refreshIfStale()
     }
     function refreshIfStale() {
+        if (isMotorsport) {
+            return
+        }
         if (!Net.cacheFresh(host.sharedCacheGet(fxKey()), fixturesMs)) refreshFixtures()
         if (!Net.cacheFresh(host.sharedCacheGet(liveKey()), liveMs)) refreshLive()
     }
@@ -203,8 +221,22 @@ Item {
             onActivated: index => sports.host.setCfg("current", index)
         }
 
+        /*  Loaded only while a motorsport competition is selected, and
+            destroyed when it is not, so its timers and its data go with it.
+            setSource because the view declares `host` as required. */
+        Loader {
+            id: motorsport
+            active: sports.isMotorsport
+            visible: active
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            onActiveChanged: if (active) setSource("sports/Formula1View.qml", { "host": sports.host })
+        }
+
         ListView {
             id: list
+
+            visible: !sports.isMotorsport
 
             /*  Following several leagues easily exceeds the card; the list
                 scrolls rather than cutting matches off. */
@@ -214,7 +246,8 @@ Item {
             }
             flickableDirection: Flickable.VerticalFlick
             Layout.fillWidth: true
-            Layout.fillHeight: true
+            Layout.fillHeight: !sports.isMotorsport
+            Layout.preferredHeight: sports.isMotorsport ? 0 : -1
             clip: true
             spacing: 2
             model: sports.events
@@ -368,7 +401,9 @@ Item {
     ColumnLayout {
         anchors.centerIn: parent
         width: parent ? parent.width : 0
-        visible: sports.events.length === 0 && sports.host.errorText.length === 0
+        /*  Motorsport has its own view with its own empty states; this one
+            belongs to the match list and must not float over it. */
+        visible: !sports.isMotorsport && sports.events.length === 0 && sports.host.errorText.length === 0
         PC3.BusyIndicator { running: sports.busy; visible: running; Layout.alignment: Qt.AlignHCenter }
         PC3.Label {
             text: sports.busy ? i18n("Loading matches…") : i18n("No matches found")
@@ -379,41 +414,81 @@ Item {
     Component {
         id: settings
         ColumnLayout {
+            id: se
             property var host
             spacing: Kirigami.Units.largeSpacing
-            id: se
 
-            PC3.Label { text: i18n("Leagues to follow"); font.weight: Font.DemiBold }
-
-            /*  A Flow left ragged rows and pushed the last leagues out of
-                sight. A grid with a column count chosen from the real width
-                keeps every league inside the dialog: three abreast when there
-                is room, two at medium width, one only when there is no other
-                option. The dialog itself scrolls vertically, so a long list
-                stays reachable.  */
-            GridLayout {
+            /*  One vertical list, nothing side by side. The previous layout
+                put the competitions in a grid whose column count was chosen
+                from the dialog's width; at larger interface scales, with a
+                longer translation, or in a small popup, the last column ran
+                past the edge and its controls could not be reached. A single
+                column cannot do that: it only ever gets taller, and the
+                dialog already scrolls. Nothing here scrolls on its own —
+                a scrolling list inside a scrolling dialog traps the wheel.  */
+            PC3.Label {
+                text: i18n("Follow competitions")
+                font.weight: Font.DemiBold
                 Layout.fillWidth: true
-                columnSpacing: Kirigami.Units.smallSpacing
-                rowSpacing: 0
-                columns: se.width > Kirigami.Units.gridUnit * 28 ? 3
-                       : (se.width > Kirigami.Units.gridUnit * 17 ? 2 : 1)
+            }
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 0
 
                 Repeater {
                     model: Provider.LEAGUES
-                    delegate: QQC2.CheckBox {
+                    delegate: QQC2.ItemDelegate {
+                        id: leagueRow
                         required property var modelData
+                        readonly property bool followed: (se.host.cfg.leagues || sports.defaultLeagues).map(String).indexOf(modelData.id) >= 0
+
                         Layout.fillWidth: true
-                        Layout.minimumWidth: 0
-                        text: modelData.icon + " " + modelData.name
-                        checked: (host.cfg.leagues || sports.defaultLeagues).map(String).indexOf(modelData.id) >= 0
-                        onToggled: {
-                            let l = (host.cfg.leagues || sports.defaultLeagues).map(String)
-                            if (checked && l.indexOf(modelData.id) < 0) l.push(modelData.id)
-                            if (!checked) l = l.filter(x => x !== modelData.id)
+                        /*  The whole row is the target, not just the box. */
+                        padding: Kirigami.Units.smallSpacing
+                        onClicked: toggle()
+                        Accessible.role: Accessible.CheckBox
+                        Accessible.name: modelData.name
+                        Accessible.checked: followed
+
+                        function toggle() {
+                            let l = (se.host.cfg.leagues || sports.defaultLeagues).map(String)
+                            if (!followed) {
+                                l.push(modelData.id)
+                            } else {
+                                l = l.filter(x => x !== modelData.id)
+                            }
                             /*  Following nothing would leave the card blank,
-                                so the last league cannot be unticked. */
-                            if (l.length === 0) l = [modelData.id]
-                            host.saveCfg(Object.assign({}, host.cfg, { leagues: l, current: 0 }))
+                                so the last competition cannot be unticked. */
+                            if (l.length === 0) {
+                                l = [modelData.id]
+                            }
+                            se.host.saveCfg(Object.assign({}, se.host.cfg, { leagues: l, current: 0 }))
+                        }
+
+                        contentItem: RowLayout {
+                            spacing: Kirigami.Units.smallSpacing
+                            QQC2.CheckBox {
+                                checked: leagueRow.followed
+                                onToggled: leagueRow.toggle()
+                                Accessible.ignored: true
+                            }
+                            PC3.Label {
+                                text: leagueRow.modelData.icon
+                                Layout.preferredWidth: Kirigami.Units.gridUnit
+                            }
+                            PC3.Label {
+                                text: leagueRow.modelData.name
+                                elide: Text.ElideRight
+                                Layout.fillWidth: true
+                                Layout.minimumWidth: 0
+                            }
+                            PC3.Label {
+                                text: leagueRow.modelData.sport
+                                font.pointSize: Kirigami.Theme.smallFont.pointSize
+                                opacity: 0.55
+                                elide: Text.ElideRight
+                            }
                         }
                     }
                 }
@@ -421,11 +496,16 @@ Item {
 
             Kirigami.Separator { Layout.fillWidth: true; opacity: 0.3 }
 
-            Kirigami.FormLayout {
+            /*  Each setting is a label above its control rather than beside
+                it, so a long translation lengthens the dialog instead of
+                squeezing the control off the edge. */
+            ColumnLayout {
                 Layout.fillWidth: true
+                spacing: Kirigami.Units.smallSpacing
 
+                PC3.Label { text: i18n("Refresh live scores"); font.weight: Font.DemiBold }
                 QQC2.ComboBox {
-                    Kirigami.FormData.label: i18n("Refresh live scores:")
+                    Layout.fillWidth: true
                     model: [
                         i18nc("@item:inlistbox refresh interval", "Every 30 seconds"),
                         i18nc("@item:inlistbox refresh interval", "Every minute"),
@@ -433,28 +513,38 @@ Item {
                         i18nc("@item:inlistbox refresh interval", "Every 5 minutes")
                     ]
                     currentIndex: Math.max(0, sports.liveIntervals.indexOf(sports.liveSeconds))
-                    onActivated: host.setCfg("liveInterval", sports.liveIntervals[currentIndex])
+                    onActivated: se.host.setCfg("liveInterval", sports.liveIntervals[currentIndex])
+                    Accessible.name: i18n("Refresh live scores")
                 }
 
-                QQC2.CheckBox {
-                    Kirigami.FormData.label: i18n("Notifications:")
-                    text: i18n("Notify me about live matches")
-                    checked: host.cfg.notify === true
-                    onToggled: host.setCfg("notify", checked)
+                PC3.Label { text: i18n("Notifications"); font.weight: Font.DemiBold }
+                QQC2.Switch {
+                    Layout.fillWidth: true
+                    text: i18n("Announce kick-off, goals and full time")
+                    checked: se.host.cfg.notify === true
+                    onToggled: se.host.setCfg("notify", checked)
                 }
             }
 
-            PC3.Label {
-                visible: host.cfg.notify === true
-                text: i18n("Kick-off, goals and full time are announced. They can only be noticed while this page is open — the menu does not run in the background, so no alerts arrive while it is closed.")
-                opacity: 0.6
-                wrapMode: Text.Wrap
-                font.pointSize: Kirigami.Theme.smallFont.pointSize
+            Kirigami.Separator { Layout.fillWidth: true; opacity: 0.3 }
+
+            /*  Footer: what the gadget does and where the data comes from,
+                below everything the user can act on. */
+            ColumnLayout {
                 Layout.fillWidth: true
-            }
-            PC3.Label {
-                text: i18n("Data from TheSportsDB (free API). Fixtures refresh every 30 minutes, and nothing is fetched while this page is closed.")
-                opacity: 0.6; wrapMode: Text.Wrap; font.pointSize: Kirigami.Theme.smallFont.pointSize; Layout.fillWidth: true
+                spacing: 2
+                PC3.Label {
+                    text: i18n("Alerts only arrive while this page is open — the menu does not run in the background.")
+                    opacity: 0.6; wrapMode: Text.Wrap; font.pointSize: Kirigami.Theme.smallFont.pointSize; Layout.fillWidth: true
+                }
+                PC3.Label {
+                    text: i18n("Football, basketball and the rest: TheSportsDB. Formula 1: the Ergast API continued by jolpica.")
+                    opacity: 0.6; wrapMode: Text.Wrap; font.pointSize: Kirigami.Theme.smallFont.pointSize; Layout.fillWidth: true
+                }
+                PC3.Label {
+                    text: i18n("Fixtures refresh every 30 minutes, and nothing is fetched while this page is closed.")
+                    opacity: 0.6; wrapMode: Text.Wrap; font.pointSize: Kirigami.Theme.smallFont.pointSize; Layout.fillWidth: true
+                }
             }
         }
     }
