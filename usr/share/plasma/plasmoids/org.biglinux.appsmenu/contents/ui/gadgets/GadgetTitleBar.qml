@@ -21,6 +21,7 @@ import org.kde.kirigami 2.20 as Kirigami
 RowLayout {
     id: bar
     property string icon: ""
+    property string iconFallback: "dialog-information"
     property string title: ""
     property string subtitle: ""
     property bool online: false
@@ -36,9 +37,10 @@ RowLayout {
 
     Kirigami.Icon {
         source: bar.icon
-        /*  The installed theme inherits only hicolor, so a name it does not
-            carry would leave an empty gap rather than fall through to Breeze. */
-        fallback: "dialog-information"
+        fallback: bar.iconFallback
+        /*  A symbolic glyph shipped inside the plasmoid arrives as a file URL,
+            which the theme machinery does not recolour on its own. */
+        isMask: bar.icon.indexOf("-symbolic") !== -1
         Layout.preferredWidth: Kirigami.Units.iconSizes.small
         Layout.preferredHeight: Kirigami.Units.iconSizes.small
         opacity: 0.85

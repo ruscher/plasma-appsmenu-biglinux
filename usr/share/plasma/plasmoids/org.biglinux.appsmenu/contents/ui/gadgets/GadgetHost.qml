@@ -228,6 +228,7 @@ Item {
                 anchors.right: parent.right
                 anchors.top: parent.top
                 icon: host.def ? host.def.icon : ""
+                iconFallback: host.def && host.def.iconFallback ? host.def.iconFallback : "dialog-information"
                 title: host.title
                 subtitle: host.subtitle
                 online: host.def ? host.def.online : false

@@ -6,7 +6,14 @@
 
     Each entry: id, name, description, icon, category, sizes (supported
     "colsxrows"), defaultSize, source (relative to gadgets/items/),
-    online (needs network), multiple (may be added more than once).
+    online (needs network), multiple (may be added more than once), and an
+    optional iconFallback.
+
+    Icons are symbolic wherever a symbolic glyph exists, so the title bars
+    and the Add dialog read as one family. Names were checked on disk: the
+    BigLinux theme (bigicons-papient) declares only hicolor as a parent, but
+    KIconLoader adds Breeze as an implicit fallback, so a Breeze-only name
+    still renders; `iconFallback` covers a theme that has neither.
 */
 
 pragma Singleton
@@ -24,77 +31,77 @@ QtObject {
     ]
 
     readonly property var gadgets: [
-        { id: "clock",        name: i18n("Clock"),           icon: "clock",                  category: "time",
+        { id: "clock",        name: i18n("Clock"),           icon: "clock-symbolic",        iconFallback: "clock", category: "time",
           description: i18n("Analog or digital clock with date and seconds"),
           sizes: ["1x1", "2x1"], defaultSize: "1x1", source: "ClockGadget.qml", online: false, multiple: true },
-        { id: "calendar",     name: i18n("Calendar"),        icon: "office-calendar",        category: "time",
+        { id: "calendar",     name: i18n("Calendar"),        icon: "office-calendar-symbolic", iconFallback: "view-calendar-symbolic", category: "time",
           description: i18n("Month view with today highlighted"),
           sizes: ["1x2", "2x2", "1x1"], defaultSize: "1x2", source: "CalendarGadget.qml", online: false, multiple: false },
-        { id: "countdown",    name: i18n("Countdown"),       icon: "chronometer",            category: "time",
+        { id: "countdown",    name: i18n("Countdown"),       icon: "chronometer-symbolic",  iconFallback: "chronometer", category: "time",
           description: i18n("Days, hours and minutes until your events"),
           sizes: ["1x1", "2x1"], defaultSize: "1x1", source: "CountdownGadget.qml", online: false, multiple: true },
-        { id: "notes",        name: i18n("Notes"),           icon: "note",                   category: "tools",
+        { id: "notes",        name: i18n("Notes"),           icon: "note-symbolic",         iconFallback: "note", category: "tools",
           description: i18n("Quick sticky notes, saved automatically"),
           sizes: ["1x1", "2x1", "1x2", "2x2"], defaultSize: "1x1", source: "NotesGadget.qml", online: false, multiple: true },
-        { id: "weather",      name: i18n("Weather"),         icon: "weather-few-clouds",     category: "online",
+        { id: "weather",      name: i18n("Weather"),         icon: "weather-few-clouds-symbolic", iconFallback: "weather-few-clouds", category: "online",
           description: i18n("Current conditions and forecast (Open-Meteo, no API key)"),
           sizes: ["1x1", "2x1", "2x2"], defaultSize: "2x1", source: "WeatherGadget.qml", online: true, multiple: true },
-        { id: "cpu",          name: i18n("CPU Meter"),       icon: "cpu",                    category: "system",
+        { id: "cpu",          name: i18n("CPU Meter"),       icon: "cpu-symbolic",          iconFallback: "cpu", category: "system",
           description: i18n("Usage of every core, frequency and temperature"),
           sizes: ["1x1", "2x1", "2x2"], defaultSize: "1x1", source: "CpuGadget.qml", online: false, multiple: false },
-        { id: "gpu",          name: i18n("GPU Meter"),       icon: "cpu",                    category: "system",
+        { id: "gpu",          name: i18n("GPU Meter"),       icon: "cpu-symbolic",          iconFallback: "cpu", category: "system",
           description: i18n("Usage, temperature, VRAM and power of your graphics cards"),
           sizes: ["1x1", "2x1"], defaultSize: "1x1", source: "GpuGadget.qml", online: false, multiple: false },
-        { id: "memory",       name: i18n("Memory"),          icon: "memory",                 category: "system",
+        { id: "memory",       name: i18n("Memory"),          icon: "memory-symbolic",       iconFallback: "memory", category: "system",
           description: i18n("RAM and swap usage"),
           sizes: ["1x1", "2x1"], defaultSize: "1x1", source: "MemoryGadget.qml", online: false, multiple: false },
-        { id: "battery",      name: i18n("Battery"),         icon: "battery-good",           category: "system",
+        { id: "battery",      name: i18n("Battery"),         icon: "battery-good-symbolic", iconFallback: "battery-good", category: "system",
           description: i18n("Charge level, state and time remaining"),
           sizes: ["1x1"], defaultSize: "1x1", source: "BatteryGadget.qml", online: false, multiple: false },
-        { id: "drives",       name: i18n("Drive Info"),      icon: "drive-harddisk",         category: "system",
+        { id: "drives",       name: i18n("Drive Info"),      icon: "drive-harddisk-symbolic", iconFallback: "drive-harddisk", category: "system",
           description: i18n("Capacity and free space of your partitions"),
           sizes: ["1x1", "2x1", "1x2"], defaultSize: "1x1", source: "DriveInfoGadget.qml", online: false, multiple: false },
         { id: "drivemonitor", name: i18n("Drive Monitor"),   icon: "drive-harddisk-symbolic", category: "system",
           description: i18n("Live read/write activity graph"),
           sizes: ["1x1", "2x1"], defaultSize: "1x1", source: "DriveMonitorGadget.qml", online: false, multiple: false },
-        { id: "network",      name: i18n("Network"),         icon: "network-wired",          category: "system",
+        { id: "network",      name: i18n("Network"),         icon: "network-wired-symbolic", iconFallback: "network-wired", category: "system",
           description: i18n("Live download/upload graph"),
           sizes: ["1x1", "2x1"], defaultSize: "1x1", source: "NetworkGadget.qml", online: false, multiple: false },
-        { id: "sysinfo",      name: i18n("System Info"),     icon: "computer",               category: "system",
+        { id: "sysinfo",      name: i18n("System Info"),     icon: "computer-symbolic",     iconFallback: "computer", category: "system",
           description: i18n("Host, kernel, uptime, CPU and GPU"),
           sizes: ["1x1", "2x1"], defaultSize: "2x1", source: "SystemInfoGadget.qml", online: false, multiple: false },
-        { id: "media",        name: i18n("Media Player"),    icon: "multimedia-player",      category: "tools",
+        { id: "media",        name: i18n("Media Player"),    icon: "multimedia-player-symbolic", iconFallback: "multimedia-player", category: "tools",
           description: i18n("Now playing with controls (MPRIS)"),
           sizes: ["1x1", "2x1"], defaultSize: "2x1", source: "MediaGadget.qml", online: false, multiple: false },
-        { id: "clipboard",    name: i18n("Clipboard"),       icon: "edit-paste",             category: "tools",
+        { id: "clipboard",    name: i18n("Clipboard"),       icon: "edit-paste-symbolic",   iconFallback: "edit-paste", category: "tools",
           description: i18n("Recent clipboard entries (Klipper)"),
           sizes: ["1x1", "2x1", "1x2"], defaultSize: "1x1", source: "ClipboardGadget.qml", online: false, multiple: false },
         { id: "quicklinks",   name: i18n("Quick Links"),     icon: "emblem-symbolic-link",   category: "tools",
           description: i18n("Your favorite apps and sites, one tap away"),
           sizes: ["1x1", "2x1", "2x2"], defaultSize: "1x1", source: "QuickLinksGadget.qml", online: false, multiple: true },
-        { id: "rss",          name: i18n("News Feed"),       icon: "news-subscribe",         category: "online",
+        { id: "rss",          name: i18n("News Feed"),       icon: "news-subscribe-symbolic", iconFallback: "news-subscribe", category: "online",
           description: i18n("Headlines with pictures from any RSS/Atom feed"),
           sizes: ["1x1", "2x1", "2x2", "1x2"], defaultSize: "2x1", source: "RssGadget.qml", online: true, multiple: true },
-        { id: "currency",     name: i18n("Currency"),        icon: "view-currency-list",     category: "online",
+        { id: "currency",     name: i18n("Currency"),        icon: "view-currency-list-symbolic", iconFallback: "view-currency-list", category: "online",
           description: i18n("Exchange rates (European Central Bank via Frankfurter)"),
           sizes: ["1x1", "2x1"], defaultSize: "1x1", source: "CurrencyGadget.qml", online: true, multiple: true },
-        { id: "sports",       name: i18n("Live Scores"),     icon: "games-highscores",       category: "online",
+        { id: "sports",       name: i18n("Live Scores"),     icon: "games-highscores-symbolic", iconFallback: "games-highscores", category: "online",
           description: i18n("Football, basketball and more — live scores and fixtures"),
           sizes: ["1x1", "2x1", "2x2"], defaultSize: "2x1", source: "SportsGadget.qml", online: true, multiple: true },
-        { id: "quotes",       name: i18n("Quote of the Day"), icon: "format-text-blockquote", category: "tools",
+        { id: "quotes",       name: i18n("Quote of the Day"), icon: "format-text-blockquote-symbolic", iconFallback: "format-text-blockquote", category: "tools",
           description: i18n("A little inspiration, every day"),
           sizes: ["1x1", "2x1"], defaultSize: "1x1", source: "QuotesGadget.qml", online: false, multiple: false },
-        { id: "tips",         name: i18n("Tips"),            icon: "help-hint",              category: "tools",
+        { id: "tips",         name: i18n("Tips"),            icon: "help-hint-symbolic",    iconFallback: "help-hint", category: "tools",
           description: i18n("Handy BigLinux and KDE tricks"),
           sizes: ["1x1", "2x1"], defaultSize: "1x1", source: "TipsGadget.qml", online: false, multiple: false },
-        { id: "gallery",      name: i18n("Gallery"),         icon: "folder-pictures",        category: "tools",
+        { id: "gallery",      name: i18n("Gallery"),         icon: "folder-pictures-symbolic", iconFallback: "folder-pictures", category: "tools",
           description: i18n("Slideshow of a folder of pictures"),
           sizes: ["1x1", "2x1", "2x2"], defaultSize: "1x1", source: "GalleryGadget.qml", online: false, multiple: true },
         /*  One entry for all five games. "puzzle" was the 2048-only gadget
             and is migrated to this on load, keeping its position and its high
             score. 1x1 is gone from the sizes: a board plus a game selector
             needs the extra row, and Sudoku asks for 2x2 on top of that.  */
-        { id: "games",        name: i18n("Games"),           icon: "applications-games",     category: "tools",
+        { id: "games",        name: i18n("Games"),           icon: "applications-games-symbolic", iconFallback: "applications-games", category: "tools",
           description: i18n("2048, Minesweeper, Sudoku, Flow Connect and Block Puzzle"),
           sizes: ["1x2", "2x2", "2x1"], defaultSize: "1x2", source: "GamesGadget.qml", online: false, multiple: false },
     ]
