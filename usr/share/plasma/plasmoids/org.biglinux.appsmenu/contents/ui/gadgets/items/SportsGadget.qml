@@ -230,7 +230,16 @@ Item {
             visible: active
             Layout.fillWidth: true
             Layout.fillHeight: true
-            onActiveChanged: if (active) setSource("sports/Formula1View.qml", { "host": sports.host })
+            /*  Both hooks: `onActiveChanged` never fires when the card is
+                created with a motorsport competition already selected, which
+                left the view active with no source and the card blank. */
+            function reload() {
+                if (active) {
+                    setSource("sports/Formula1View.qml", { "host": sports.host })
+                }
+            }
+            Component.onCompleted: reload()
+            onActiveChanged: reload()
         }
 
         ListView {
