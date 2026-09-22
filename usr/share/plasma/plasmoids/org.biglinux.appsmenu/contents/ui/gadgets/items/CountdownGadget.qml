@@ -2,10 +2,13 @@
     SPDX-FileCopyrightText: 2024 BigLinux Team
     SPDX-License-Identifier: GPL-2.0-or-later
 
-    Countdown — events and quick timers. When one finishes: a sound plays and
-    a persistent system notification (stays until you close it) shows the
-    title and duration. cfg: { events: [{ name, when: "yyyy-MM-dd HH:mm",
-    created, quick, fired }] }
+    Countdown — events and quick timers. The next event is shown large, the
+    others in a scrolling list under it. When one finishes, a notification
+    from this gadget's own component ("Countdown", chronometer icon) stays up
+    and the alarm sound loops until it is dismissed — from the notification or
+    from the card — which marks the event acknowledged.
+
+    cfg: { events: [{ name, when: "yyyy-MM-dd HH:mm", created, quick, fired, acked }] }
 */
 
 import QtQuick 2.15
@@ -59,6 +62,14 @@ Item {
         return { days: days, h: h, m: m, s: s }
     }
     function pad(n) { return (n < 10 ? "0" : "") + n }
+    /*  Compact remaining time for the list: days once it is that far off,
+        hours and minutes within the day, minutes and seconds at the end.  */
+    function remainingText(ts) {
+        const p = parts(ts)
+        if (p.days >= 1) return i18np("%1 day", "%1 days", p.days)
+        if (p.h >= 1) return i18nc("@info hours and minutes left", "%1 h %2 min", p.h, pad(p.m))
+        return i18nc("@info minutes and seconds left", "%1:%2", p.m, pad(p.s))
+    }
     function durationText(ms) {
         const m = Math.round(ms / 60000)
         if (m < 60) return i18np("%1 minute", "%1 minutes", m)
@@ -74,32 +85,106 @@ Item {
         saveEvents(list)
         pop.restart()
     }
+    function sameEvent(a, b) { return a.name === b.name && a.when === b.when }
+    function keyOf(ev) { return ev.name + "\u0000" + ev.when }
+
     function remove(ev) {
-        saveEvents((host.cfg.events || []).filter(e => !(e.name === ev.name && e.when === ev.when)))
+        closeNotification(ev)
+        saveEvents((host.cfg.events || []).filter(e => !sameEvent(e, ev)))
     }
+
+    /*  Dismissing stops the sound and closes the notification; the event
+        stays listed as finished until it is removed. Both surfaces — the
+        notification's button and the card's — end up here.  */
+    function acknowledge(ev) {
+        closeNotification(ev)
+        saveEvents((host.cfg.events || []).map(e => sameEvent(e, ev) ? Object.assign({}, e, { acked: true }) : e))
+    }
+
     function fire(ev) {
         // mark first so it never fires twice
-        const list = (host.cfg.events || []).map(e => (e.name === ev.name && e.when === ev.when) ? Object.assign({}, e, { fired: true }) : e)
-        saveEvents(list)
+        saveEvents((host.cfg.events || []).map(e => sameEvent(e, ev) ? Object.assign({}, e, { fired: true, firedAt: Date.now() }) : e))
         const started = ev.created ? new Date(ev.created) : null
         const dur = ev.created ? durationText(ev.ts - ev.created) : ""
         const text = started
-            ? i18n("“%1” finished.\nDuration: %2 (started at %3, ended at %4).", ev.name, dur, Qt.formatTime(started, "HH:mm"), Qt.formatTime(new Date(ev.ts), "HH:mm"))
-            : i18n("“%1” is here — %2.", ev.name, Qt.formatDateTime(new Date(ev.ts), Qt.locale().dateTimeFormat(Locale.ShortFormat)))
-        const n = notificationComponent.createObject(cd, { title: i18n("Countdown finished"), text: text })
-        if (n) n.sendEvent()
-        sound.run("canberra-gtk-play -i alarm-clock-elapsed 2>/dev/null || paplay /usr/share/sounds/ocean/stereo/alarm-clock-elapsed.oga 2>/dev/null || pw-play /usr/share/sounds/ocean/stereo/alarm-clock-elapsed.oga")
+            ? i18n("Finished at %1 after %2 (started %3).", Qt.formatTime(new Date(ev.ts), "HH:mm"), dur, Qt.formatTime(started, "HH:mm"))
+            : i18n("It is time — %1.", Qt.formatDateTime(new Date(ev.ts), Qt.locale().dateTimeFormat(Locale.ShortFormat)))
+        const n = notificationComponent.createObject(cd, { title: ev.name, text: text, eventKey: keyOf(ev) })
+        if (n) {
+            const open = Object.assign({}, notifications)
+            open[keyOf(ev)] = n
+            notifications = open
+            n.sendEvent()
+        }
+        if (!alarmAvailable) {
+            // No QtMultimedia: at least one beep through the system sound theme.
+            sound.run("canberra-gtk-play -i alarm-clock-elapsed 2>/dev/null || paplay /usr/share/sounds/ocean/stereo/alarm-clock-elapsed.oga 2>/dev/null || pw-play /usr/share/sounds/ocean/stereo/alarm-clock-elapsed.oga")
+        }
+    }
+
+    /*  Open notifications by event, so a dismissal on the card can close the
+        popup and a dismissal on the popup can silence the card.  */
+    property var notifications: ({})
+    function closeNotification(ev) {
+        const k = keyOf(ev)
+        const n = notifications[k]
+        if (n) {
+            const open = Object.assign({}, notifications)
+            delete open[k]
+            notifications = open
+            n.close()
+        }
+    }
+
+    /*  Events that have finished and nobody has acknowledged yet. As long as
+        there is one, the alarm rings; one loop serves them all.  */
+    readonly property var ringingEvents: events.filter(e => e.fired && !e.acked)
+    readonly property bool alarmAvailable: alarmLoader.status === Loader.Ready
+
+    Loader {
+        id: alarmLoader
+        source: Qt.resolvedUrl("../CountdownAlarm.qml")
+        /*  A system without QtMultimedia fails to load the file; that is
+            expected and handled — the fallback beep above takes over. */
+        onStatusChanged: if (status === Loader.Error) console.info("Countdown: QtMultimedia unavailable, alarm falls back to a single beep")
+    }
+    Binding {
+        target: alarmLoader.item
+        property: "ringing"
+        value: cd.ringingEvents.length > 0
+        when: alarmLoader.status === Loader.Ready
     }
 
     Component {
         id: notificationComponent
         KNotification.Notification {
-            componentName: "plasma_workspace"
-            eventId: "notification"
+            id: note
+            property string eventKey: ""
+            componentName: "org.biglinux.appsmenu.countdown"
+            eventId: "finished"
             iconName: "chronometer"
             flags: KNotification.Notification.Persistent
             urgency: KNotification.Notification.HighUrgency
             autoDelete: true
+            function ackMine() {
+                for (const e of cd.events) {
+                    if (cd.keyOf(e) === note.eventKey) { cd.acknowledge(e); return }
+                }
+            }
+            defaultAction: KNotification.NotificationAction {
+                label: i18nc("@action:button on the countdown notification", "Dismiss")
+                onActivated: note.ackMine()
+            }
+            actions: [
+                KNotification.NotificationAction {
+                    label: i18nc("@action:button on the countdown notification", "Dismiss")
+                    onActivated: note.ackMine()
+                }
+            ]
+            /*  Closing the popup by any means — the button, the X, a timeout
+                on a non-persistent server — is an acknowledgement too, so the
+                sound can never outlive the thing that explains it.  */
+            onClosed: note.ackMine()
         }
     }
     P5Support.DataSource {
@@ -163,36 +248,78 @@ Item {
             }
         }
 
-        /*  Finished events waiting to be dismissed. Every one of them: these
-            rows are how an event is dismissed, so hiding any leaves it stuck
-            for good. The list is bounded and scrolls rather than pushing the
-            countdown itself off the card.  */
+        /*  Everything but the highlighted next event: the other upcoming
+            ones with their remaining time, then the finished ones until they
+            are removed. One list, bounded by the card, scrolling — never a
+            stack of Repeater rows that would push the countdown itself off
+            a small card.  */
         ListView {
-            id: firedList
-            readonly property var fired: cd.events.filter(e => e.fired)
+            id: othersList
+            readonly property var others: cd.pending.slice(1).concat(cd.events.filter(e => e.fired))
 
             Layout.fillWidth: true
-            Layout.preferredHeight: Math.min(contentHeight,
-                                             Kirigami.Units.gridUnit * (cd.host.compact ? 2.2 : 4))
-            visible: fired.length > 0
-            model: fired
+            Layout.fillHeight: true
+            Layout.minimumHeight: others.length > 0 ? Kirigami.Units.gridUnit * 1.4 : 0
+            visible: others.length > 0
+            model: others
             clip: true
             spacing: 0
             boundsBehavior: Flickable.StopAtBounds
             flickableDirection: Flickable.VerticalFlick
+            reuseItems: true
 
             QQC2.ScrollBar.vertical: PC3.ScrollBar {
-                policy: firedList.contentHeight > firedList.height ? QQC2.ScrollBar.AsNeeded
-                                                                   : QQC2.ScrollBar.AlwaysOff
+                policy: othersList.contentHeight > othersList.height ? QQC2.ScrollBar.AsNeeded
+                                                                     : QQC2.ScrollBar.AlwaysOff
             }
 
             delegate: RowLayout {
+                id: evRow
                 required property var modelData
-                width: firedList.width
+                readonly property bool done: modelData.fired === true
+                readonly property bool ringing: done && modelData.acked !== true
+                width: othersList.width
                 spacing: Kirigami.Units.smallSpacing
-                Kirigami.Icon { source: "dialog-ok"; color: cd.host.accent; Layout.preferredWidth: Kirigami.Units.iconSizes.small; Layout.preferredHeight: Kirigami.Units.iconSizes.small }
-                PC3.Label { text: i18n("%1 — done", modelData.name); font.pointSize: Kirigami.Theme.smallFont.pointSize; elide: Text.ElideRight; Layout.fillWidth: true }
-                PC3.ToolButton { icon.name: "dialog-close"; icon.width: Kirigami.Units.iconSizes.small; icon.height: Kirigami.Units.iconSizes.small; onClicked: cd.remove(modelData); Accessible.name: i18n("Dismiss") }
+
+                Kirigami.Icon {
+                    source: evRow.ringing ? "alarm-symbolic" : (evRow.done ? "dialog-ok" : "chronometer-symbolic")
+                    color: evRow.ringing ? Kirigami.Theme.negativeTextColor : cd.host.accent
+                    Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                    Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                    opacity: evRow.done && !evRow.ringing ? 0.6 : 1
+                }
+                PC3.Label {
+                    text: evRow.modelData.name
+                    font.pointSize: Kirigami.Theme.smallFont.pointSize
+                    elide: Text.ElideRight
+                    Layout.fillWidth: true
+                    Layout.minimumWidth: 0
+                }
+                PC3.Label {
+                    text: evRow.done ? (evRow.ringing ? i18nc("@info a finished countdown still sounding", "ringing")
+                                                      : i18nc("@info a finished countdown", "done"))
+                                     : cd.remainingText(evRow.modelData.ts)
+                    font.pointSize: Kirigami.Theme.smallFont.pointSize
+                    font.weight: evRow.done ? Font.Normal : Font.DemiBold
+                    color: evRow.ringing ? Kirigami.Theme.negativeTextColor : Kirigami.Theme.textColor
+                    opacity: evRow.done && !evRow.ringing ? 0.6 : 0.85
+                }
+                PC3.ToolButton {
+                    visible: evRow.ringing
+                    icon.name: "notifications-disabled-symbolic"
+                    icon.width: Kirigami.Units.iconSizes.small; icon.height: Kirigami.Units.iconSizes.small
+                    onClicked: cd.acknowledge(evRow.modelData)
+                    Accessible.name: i18n("Dismiss alarm")
+                    PC3.ToolTip.text: i18n("Dismiss alarm"); PC3.ToolTip.visible: hovered
+                }
+                PC3.ToolButton {
+                    visible: evRow.done
+                    icon.name: "dialog-close"
+                    icon.width: Kirigami.Units.iconSizes.small; icon.height: Kirigami.Units.iconSizes.small
+                    onClicked: cd.remove(evRow.modelData)
+                    Accessible.name: i18n("Remove finished event")
+                    PC3.ToolTip.text: i18n("Remove"); PC3.ToolTip.visible: hovered
+                }
             }
         }
 
@@ -207,7 +334,7 @@ Item {
             PC3.Label { text: i18n("Start a quick timer or add an event"); opacity: 0.6; font.pointSize: Kirigami.Theme.smallFont.pointSize; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.Wrap; Layout.fillWidth: true }
             Item { Layout.fillHeight: true }
         }
-        Item { Layout.fillHeight: true; visible: cd.next !== null }
+        Item { Layout.fillHeight: true; visible: cd.next !== null && othersList.others.length === 0 }
 
         // Quick timers
         RowLayout {
