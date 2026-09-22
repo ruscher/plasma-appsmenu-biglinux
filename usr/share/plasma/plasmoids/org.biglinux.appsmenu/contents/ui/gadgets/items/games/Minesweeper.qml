@@ -47,6 +47,17 @@ Item {
 
     readonly property int remaining: mineCount - flags
     readonly property bool finished: lost || won
+    readonly property bool compact: host.compact
+
+    /*  New game lives in the title bar at every size; the header row that
+        held it is gone and the board has the whole card.  */
+    property var titleActions: [newAction]
+    QQC2.Action {
+        id: newAction
+        text: i18nc("@action:button", "New game")
+        icon.name: "view-refresh-symbolic"
+        onTriggered: mines.reset()
+    }
 
     Component.onCompleted: {
         host.accentColor = "#ef4444"
@@ -220,31 +231,6 @@ Item {
         anchors.fill: parent
         spacing: Kirigami.Units.smallSpacing
 
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: Kirigami.Units.smallSpacing
-
-            PC3.Label {
-                text: mines.won ? i18n("You cleared it")
-                                : (mines.lost ? i18n("You hit a mine") : "")
-                font.weight: Font.DemiBold
-                font.pointSize: Kirigami.Theme.smallFont.pointSize
-                color: mines.won ? Kirigami.Theme.positiveTextColor
-                                 : Kirigami.Theme.negativeTextColor
-                elide: Text.ElideRight
-                Layout.fillWidth: true
-            }
-            PC3.ToolButton {
-                icon.name: "view-refresh"
-                icon.width: Kirigami.Units.iconSizes.small
-                icon.height: Kirigami.Units.iconSizes.small
-                onClicked: mines.reset()
-                Accessible.name: i18n("New game")
-                PC3.ToolTip.text: i18n("New game")
-                PC3.ToolTip.visible: hovered
-            }
-        }
-
         Item {
             id: boardBox
             Layout.fillWidth: true
@@ -254,6 +240,28 @@ Item {
                 Math.min(width / mines.cols, height / mines.rows)))
             readonly property real bw: cell * mines.cols
             readonly property real bh: cell * mines.rows
+
+            /*  Outcome on the board, with the way out; the subtitle carries it
+                too, so a screen reader hears it without the overlay.  */
+            Rectangle {
+                anchors.centerIn: parent
+                width: boardBox.bw
+                height: boardBox.bh
+                z: 5
+                visible: mines.finished
+                color: Qt.rgba(0, 0, 0, 0.5)
+                ColumnLayout {
+                    anchors.centerIn: parent
+                    spacing: Kirigami.Units.smallSpacing
+                    PC3.Label {
+                        text: mines.won ? i18n("Cleared!") : i18n("Boom!")
+                        color: "white"; font.weight: Font.Bold
+                        font.pointSize: mines.compact ? Kirigami.Theme.defaultFont.pointSize : Kirigami.Theme.defaultFont.pointSize * 1.2
+                        Layout.alignment: Qt.AlignHCenter
+                    }
+                    PC3.Button { text: i18n("Play again"); Layout.alignment: Qt.AlignHCenter; onClicked: mines.reset() }
+                }
+            }
 
             Grid {
                 id: grid

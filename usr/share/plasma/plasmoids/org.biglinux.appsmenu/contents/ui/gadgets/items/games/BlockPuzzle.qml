@@ -15,6 +15,7 @@
 
 import QtQuick 2.15
 import QtQuick.Layouts 1.15
+import QtQuick.Controls 2.15 as QQC2
 import org.kde.plasma.components 3.0 as PC3
 import org.kde.kirigami 2.20 as Kirigami
 
@@ -56,6 +57,7 @@ Item {
     property bool over: false
 
     readonly property int best: Number(host.cfg.blocksBest || 0)
+    readonly property bool compact: host.compact
 
     Component.onCompleted: {
         host.accentColor = "#f97316"
@@ -100,6 +102,14 @@ Item {
             }
         }
         return true
+    }
+
+    function coveredBy(shapeIndex, anchor, target) {
+        const ac = anchor % size, ar = Math.floor(anchor / size)
+        for (const [dx, dy] of shapes[shapeIndex]) {
+            if ((ar + dy) * size + (ac + dx) === target && ac + dx < size) return true
+        }
+        return false
     }
 
     function anywhere(shapeIndex) {
@@ -200,158 +210,182 @@ Item {
         recordBest()
     }
 
-    ColumnLayout {
-        anchors.fill: parent
-        spacing: Kirigami.Units.smallSpacing
+    /*  Two arrangements, chosen from the real geometry rather than the size
+        label: the tray sits beside the board when the content area is wider
+        than it is tall (1x1 and 2x1 cards), under it when there is more
+        height than width (1x2). Either way the board takes the largest square
+        the remaining space allows, which on a 1x1 card is nearly all of it —
+        the tray is a column of three pieces drawn at three quarters of a board cell.  */
+    readonly property bool sideTray: width >= height * 0.95
+    /*  The tray takes about a quarter of the card, or whatever the square
+        board leaves over when that is more, up to a comfortable maximum.  */
+    readonly property real trayThickness: sideTray
+        ? Math.max(Kirigami.Units.gridUnit * 1.7, Math.min(Math.max(width * 0.28, width - height - gapSize), Kirigami.Units.gridUnit * 5))
+        : Math.max(Kirigami.Units.gridUnit * 1.7, Math.min(Math.max(height * 0.24, height - width - gapSize), Kirigami.Units.gridUnit * 5))
+    readonly property real gapSize: Kirigami.Units.smallSpacing
+    readonly property real boardSide: Math.max(48, sideTray
+        ? Math.min(width - trayThickness - gapSize, height)
+        : Math.min(width, height - trayThickness - gapSize))
+    readonly property real cellSize: boardSide / size
+    /*  Whatever the square board and the tray do not use is split evenly
+        around them, so a wide card does not leave everything hugging a side. */
+    readonly property real originX: Math.round((width - boardSide - (sideTray ? gapSize + trayThickness : 0)) / 2)
+    readonly property real originY: Math.round((height - boardSide - (sideTray ? 0 : gapSize + trayThickness)) / 2)
 
-        RowLayout {
-            Layout.fillWidth: true
-            PC3.Label {
-                text: blocks.over ? i18n("No room for any piece") : ""
-                color: Kirigami.Theme.negativeTextColor
-                font.weight: Font.DemiBold
-                font.pointSize: Kirigami.Theme.smallFont.pointSize
-                elide: Text.ElideRight
-                Layout.fillWidth: true
-            }
-            PC3.ToolButton {
-                icon.name: "view-refresh"
-                icon.width: Kirigami.Units.iconSizes.small
-                icon.height: Kirigami.Units.iconSizes.small
-                onClicked: blocks.reset()
-                Accessible.name: i18n("New game")
-                PC3.ToolTip.text: i18n("New game"); PC3.ToolTip.visible: hovered
+    property var titleActions: [newAction]
+    QQC2.Action {
+        id: newAction
+        text: i18nc("@action:button", "New game")
+        icon.name: "view-refresh-symbolic"
+        onTriggered: blocks.reset()
+    }
+
+    Item {
+        id: boardBox
+        x: blocks.originX
+        y: blocks.originY
+        width: blocks.boardSide
+        height: blocks.boardSide
+
+        Repeater {
+            model: blocks.size * blocks.size
+            delegate: Rectangle {
+                required property int index
+                readonly property int cx: index % blocks.size
+                readonly property int cy: Math.floor(index / blocks.size)
+                readonly property int v: blocks.board[index] || 0
+                readonly property var piece: blocks.selected >= 0 ? blocks.tray[blocks.selected] : null
+                readonly property bool hoverHere: hoverArea.hoverCell === index
+                readonly property bool fitsHere: piece && hoverHere ? blocks.fits(piece.shape, cx, cy) : false
+                /*  Green-ish ghost where the piece would land, red tint where it
+                    cannot: the answer is visible before the tap, not after. */
+                readonly property bool ghost: piece && hoverArea.hoverCell >= 0 && fitsAtHover && blocks.coveredBy(piece.shape, hoverArea.hoverCell, index)
+                readonly property bool fitsAtHover: piece && hoverArea.hoverCell >= 0
+                    ? blocks.fits(piece.shape, hoverArea.hoverCell % blocks.size, Math.floor(hoverArea.hoverCell / blocks.size)) : false
+                readonly property bool rejected: piece && hoverHere && !fitsAtHover
+
+                x: cx * blocks.cellSize
+                y: cy * blocks.cellSize
+                width: blocks.cellSize
+                height: blocks.cellSize
+                radius: Math.max(1, blocks.cellSize * 0.12)
+                color: v > 0 ? blocks.palette[v - 1]
+                     : ghost ? Qt.rgba(blocks.host.accent.r, blocks.host.accent.g, blocks.host.accent.b, 0.45)
+                     : rejected ? Qt.rgba(Kirigami.Theme.negativeTextColor.r, Kirigami.Theme.negativeTextColor.g, Kirigami.Theme.negativeTextColor.b, 0.35)
+                     : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.07)
+                border.width: 1
+                border.color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.7)
             }
         }
 
-        Item {
-            id: boardBox
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            readonly property real side: Math.max(60, Math.min(width, height))
-            readonly property real cell: side / blocks.size
+        MouseArea {
+            id: hoverArea
+            anchors.fill: parent
+            hoverEnabled: true
+            property int hoverCell: -1
+            function cellAt(mx, my) {
+                const c = Math.floor(mx / blocks.cellSize), r = Math.floor(my / blocks.cellSize)
+                if (c < 0 || r < 0 || c >= blocks.size || r >= blocks.size) return -1
+                return r * blocks.size + c
+            }
+            onPositionChanged: mouse => hoverCell = cellAt(mouse.x, mouse.y)
+            onExited: hoverCell = -1
+            onClicked: mouse => {
+                const i = cellAt(mouse.x, mouse.y)
+                if (i >= 0) blocks.place(i % blocks.size, Math.floor(i / blocks.size))
+            }
+        }
 
-            Item {
+        /*  Game over is said on the board itself, with the way out.  */
+        Rectangle {
+            anchors.fill: parent
+            visible: blocks.over
+            radius: Kirigami.Units.smallSpacing
+            color: Qt.rgba(0, 0, 0, 0.55)
+            ColumnLayout {
                 anchors.centerIn: parent
-                width: boardBox.side
-                height: boardBox.side
+                spacing: Kirigami.Units.smallSpacing
+                PC3.Label {
+                    text: i18n("No room for any piece")
+                    color: "white"; font.weight: Font.Bold
+                    font.pointSize: blocks.compact ? Kirigami.Theme.smallFont.pointSize : Kirigami.Theme.defaultFont.pointSize
+                    horizontalAlignment: Text.AlignHCenter; wrapMode: Text.Wrap
+                    Layout.maximumWidth: boardBox.width - Kirigami.Units.largeSpacing
+                }
+                PC3.Label {
+                    text: i18nc("@info:status score and record", "%1 · best %2", blocks.score, blocks.best)
+                    color: "white"; opacity: 0.85; font.pointSize: Kirigami.Theme.smallFont.pointSize
+                    Layout.alignment: Qt.AlignHCenter
+                }
+                PC3.Button { text: i18n("Play again"); Layout.alignment: Qt.AlignHCenter; onClicked: blocks.reset() }
+            }
+        }
+    }
 
-                Repeater {
-                    model: blocks.size * blocks.size
-                    delegate: Rectangle {
-                        required property int index
-                        readonly property int cx: index % blocks.size
-                        readonly property int cy: Math.floor(index / blocks.size)
-                        readonly property int v: blocks.board[index] || 0
-                        readonly property bool preview: blocks.selected >= 0
-                            && blocks.tray[blocks.selected]
-                            && hoverArea.hoverCell === index
-                            && blocks.fits(blocks.tray[blocks.selected].shape, cx, cy)
+    /*  The three offers, as a column beside the board or a row under it.  */
+    Grid {
+        id: trayGrid
+        x: blocks.sideTray ? boardBox.x + blocks.boardSide + blocks.gapSize : boardBox.x
+        y: blocks.sideTray ? boardBox.y : boardBox.y + blocks.boardSide + blocks.gapSize
+        width: blocks.sideTray ? blocks.trayThickness : blocks.boardSide
+        height: blocks.sideTray ? blocks.boardSide : blocks.trayThickness
+        /*  Only the column count is set: giving rows as well makes the two
+            change one after the other and the Grid complains about a 1×1
+            holding three items in between.  */
+        columns: blocks.sideTray ? 1 : 3
+        spacing: Kirigami.Units.smallSpacing
 
-                        x: cx * boardBox.cell
-                        y: cy * boardBox.cell
-                        width: boardBox.cell
-                        height: boardBox.cell
-                        radius: 2
-                        color: v > 0 ? blocks.palette[v - 1]
-                             : (preview ? Qt.rgba(blocks.host.accent.r, blocks.host.accent.g, blocks.host.accent.b, 0.35)
-                             : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.06))
-                        border.width: 1
-                        border.color: Qt.rgba(Kirigami.Theme.backgroundColor.r,
-                                              Kirigami.Theme.backgroundColor.g,
-                                              Kirigami.Theme.backgroundColor.b, 0.7)
-                        Behavior on color { ColorAnimation { duration: Kirigami.Units.shortDuration } }
+        readonly property real slotW: blocks.sideTray ? width : (width - spacing * 2) / 3
+        readonly property real slotH: blocks.sideTray ? (height - spacing * 2) / 3 : height
+
+        Repeater {
+            model: 3
+            delegate: Rectangle {
+                id: slot
+                required property int index
+                readonly property var piece: blocks.tray[index] || null
+                readonly property bool selected: blocks.selected === index
+                width: trayGrid.slotW
+                height: trayGrid.slotH
+                radius: Kirigami.Units.smallSpacing
+                color: selected ? Qt.rgba(blocks.host.accent.r, blocks.host.accent.g, blocks.host.accent.b, 0.28)
+                                : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, piece ? 0.06 : 0.02)
+                border.width: selected ? 2 : 0
+                border.color: blocks.host.accent
+
+                Item {
+                    id: glyph
+                    anchors.centerIn: parent
+                    readonly property var shape: slot.piece ? blocks.shapes[slot.piece.shape] : []
+                    readonly property int w: shape.reduce((m, s) => Math.max(m, s[0]), 0) + 1
+                    readonly property int h: shape.reduce((m, s) => Math.max(m, s[1]), 0) + 1
+                    readonly property real unit: Math.max(3, Math.min((slot.width - 6) / w, (slot.height - 6) / h, blocks.cellSize * 0.75))
+                    width: w * unit
+                    height: h * unit
+                    Repeater {
+                        model: glyph.shape
+                        delegate: Rectangle {
+                            required property var modelData
+                            x: modelData[0] * glyph.unit
+                            y: modelData[1] * glyph.unit
+                            width: glyph.unit - 1
+                            height: glyph.unit - 1
+                            radius: 1
+                            color: slot.piece ? blocks.palette[slot.piece.colour] : "transparent"
+                        }
                     }
                 }
 
                 MouseArea {
-                    id: hoverArea
                     anchors.fill: parent
-                    hoverEnabled: true
-                    property int hoverCell: -1
-
-                    function cellAt(mx, my) {
-                        const c = Math.floor(mx / boardBox.cell)
-                        const r = Math.floor(my / boardBox.cell)
-                        if (c < 0 || r < 0 || c >= blocks.size || r >= blocks.size) {
-                            return -1
-                        }
-                        return r * blocks.size + c
-                    }
-                    onPositionChanged: mouse => hoverCell = cellAt(mouse.x, mouse.y)
-                    onExited: hoverCell = -1
-                    onClicked: mouse => {
-                        const i = cellAt(mouse.x, mouse.y)
-                        if (i >= 0) {
-                            blocks.place(i % blocks.size, Math.floor(i / blocks.size))
-                        }
-                    }
+                    enabled: slot.piece !== null && !blocks.over
+                    onClicked: blocks.selected = blocks.selected === slot.index ? -1 : slot.index
                 }
-            }
-        }
 
-        /*  The three offers. Tap one, then tap where it goes. */
-        RowLayout {
-            Layout.fillWidth: true
-            Layout.preferredHeight: Kirigami.Units.gridUnit * 2.4
-            spacing: Kirigami.Units.smallSpacing
-
-            Repeater {
-                model: 3
-                delegate: Rectangle {
-                    required property int index
-                    readonly property var piece: blocks.tray[index] || null
-
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    radius: Kirigami.Units.smallSpacing
-                    color: blocks.selected === index
-                        ? Qt.rgba(blocks.host.accent.r, blocks.host.accent.g, blocks.host.accent.b, 0.22)
-                        : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.05)
-
-                    Item {
-                        anchors.centerIn: parent
-                        readonly property var shape: parent.piece ? blocks.shapes[parent.piece.shape] : []
-                        readonly property int w: {
-                            let m = 0
-                            for (const s of shape) { m = Math.max(m, s[0]) }
-                            return m + 1
-                        }
-                        readonly property int h: {
-                            let m = 0
-                            for (const s of shape) { m = Math.max(m, s[1]) }
-                            return m + 1
-                        }
-                        readonly property real unit: Math.min(
-                            (parent.width - 8) / Math.max(1, w),
-                            (parent.height - 8) / Math.max(1, h), 10)
-                        width: w * unit
-                        height: h * unit
-
-                        Repeater {
-                            model: parent.shape
-                            delegate: Rectangle {
-                                required property var modelData
-                                x: modelData[0] * parent.unit
-                                y: modelData[1] * parent.unit
-                                width: parent.unit - 1
-                                height: parent.unit - 1
-                                radius: 1
-                                color: parent.parent.piece ? blocks.palette[parent.parent.piece.colour] : "transparent"
-                            }
-                        }
-                    }
-
-                    MouseArea {
-                        anchors.fill: parent
-                        enabled: parent.piece !== null && !blocks.over
-                        onClicked: blocks.selected = blocks.selected === parent.index ? -1 : parent.index
-                    }
-
-                    Accessible.role: Accessible.Button
-                    Accessible.name: piece ? i18nc("@info a piece waiting to be placed", "Piece %1", index + 1)
-                                           : i18nc("@info an empty piece slot", "Used")
-                }
+                Accessible.role: Accessible.Button
+                Accessible.name: piece ? (selected ? i18nc("@info a piece that is selected", "Piece %1, selected", index + 1)
+                                                  : i18nc("@info a piece waiting to be placed", "Piece %1", index + 1))
+                                       : i18nc("@info an empty piece slot", "Used")
             }
         }
     }

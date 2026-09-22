@@ -18,6 +18,7 @@
 
 import QtQuick 2.15
 import QtQuick.Layouts 1.15
+import QtQuick.Controls 2.15 as QQC2
 import org.kde.plasma.components 3.0 as PC3
 import org.kde.kirigami 2.20 as Kirigami
 
@@ -51,6 +52,21 @@ Item {
         return n
     }
     readonly property bool solved: pairCount > 0 && connected === pairCount
+    readonly property bool compact: host.compact
+
+    property var titleActions: [clearAction, newAction]
+    QQC2.Action {
+        id: clearAction
+        text: i18nc("@action:button", "Clear the board")
+        icon.name: "edit-clear-symbolic"
+        onTriggered: flow.clearAll()
+    }
+    QQC2.Action {
+        id: newAction
+        text: i18nc("@action:button", "New board")
+        icon.name: "view-refresh-symbolic"
+        onTriggered: flow.newBoard()
+    }
 
     Component.onCompleted: {
         host.accentColor = "#06b6d4"
@@ -208,34 +224,6 @@ Item {
     ColumnLayout {
         anchors.fill: parent
         spacing: Kirigami.Units.smallSpacing
-
-        RowLayout {
-            Layout.fillWidth: true
-            PC3.Label {
-                text: flow.solved ? i18n("All joined") : ""
-                color: Kirigami.Theme.positiveTextColor
-                font.weight: Font.DemiBold
-                font.pointSize: Kirigami.Theme.smallFont.pointSize
-                Layout.fillWidth: true
-                elide: Text.ElideRight
-            }
-            PC3.ToolButton {
-                icon.name: "edit-clear"
-                icon.width: Kirigami.Units.iconSizes.small
-                icon.height: Kirigami.Units.iconSizes.small
-                onClicked: flow.clearAll()
-                Accessible.name: i18n("Clear the board")
-                PC3.ToolTip.text: i18n("Clear the board"); PC3.ToolTip.visible: hovered
-            }
-            PC3.ToolButton {
-                icon.name: "view-refresh"
-                icon.width: Kirigami.Units.iconSizes.small
-                icon.height: Kirigami.Units.iconSizes.small
-                onClicked: flow.newBoard()
-                Accessible.name: i18n("New board")
-                PC3.ToolTip.text: i18n("New board"); PC3.ToolTip.visible: hovered
-            }
-        }
 
         Item {
             id: boardBox

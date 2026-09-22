@@ -94,15 +94,17 @@ Item {
                     property real level: bat.percent / 100
                     Behavior on level { NumberAnimation { duration: 1200; easing.type: Easing.OutCubic } }
                     property real phase: 0
+                    /*  The wave is decoration and a looping animation repaints the
+                        whole popup at vsync; it moves only while hovered.  */
                     NumberAnimation on phase {
-                        running: bat.host.active && Kirigami.Units.longDuration > 0
+                        running: bat.host.active && bat.host.hovered && Kirigami.Units.longDuration > 0
                         loops: Animation.Infinite
                         from: 0; to: 2 * Math.PI; duration: bat.charging ? 1400 : 2600
                     }
                     // charging: level "breathes" upward to read as filling
                     property real breathe: 0
                     SequentialAnimation on breathe {
-                        running: bat.charging && bat.host.active && Kirigami.Units.longDuration > 0
+                        running: bat.charging && bat.host.active && bat.host.hovered && Kirigami.Units.longDuration > 0
                         loops: Animation.Infinite
                         NumberAnimation { to: 0.035; duration: 1300; easing.type: Easing.InOutSine }
                         NumberAnimation { to: 0.0; duration: 1300; easing.type: Easing.InOutSine }

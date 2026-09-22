@@ -35,6 +35,26 @@ Item {
     property int selected: -1
     property bool noteMode: false
     property bool solved: false
+    readonly property bool compact: host.compact
+
+    /*  Pencil marks and New puzzle in the title bar; the header row is gone.
+        On a 1x1 card the number row goes too — a popover pad appears at the
+        selected cell instead, and the keyboard always works.  */
+    property var titleActions: [notesAction, newAction]
+    QQC2.Action {
+        id: notesAction
+        text: i18nc("@action:button toggle pencil marks (N)", "Pencil marks (N)")
+        icon.name: "draw-freehand-symbolic"
+        checkable: true
+        checked: sudoku.noteMode
+        onToggled: sudoku.noteMode = checked
+    }
+    QQC2.Action {
+        id: newAction
+        text: i18nc("@action:button", "New puzzle")
+        icon.name: "view-refresh-symbolic"
+        onTriggered: sudoku.newPuzzle()
+    }
 
     Component.onCompleted: {
         host.accentColor = "#3b82f6"
@@ -202,38 +222,6 @@ Item {
         anchors.fill: parent
         spacing: Kirigami.Units.smallSpacing
 
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: Kirigami.Units.smallSpacing
-
-            PC3.Label {
-                text: sudoku.solved ? i18n("Solved") : ""
-                color: Kirigami.Theme.positiveTextColor
-                font.weight: Font.DemiBold
-                font.pointSize: Kirigami.Theme.smallFont.pointSize
-                Layout.fillWidth: true
-                elide: Text.ElideRight
-            }
-            PC3.ToolButton {
-                icon.name: "draw-freehand"
-                checkable: true
-                checked: sudoku.noteMode
-                icon.width: Kirigami.Units.iconSizes.small
-                icon.height: Kirigami.Units.iconSizes.small
-                onToggled: sudoku.noteMode = checked
-                Accessible.name: i18n("Pencil marks")
-                PC3.ToolTip.text: i18n("Pencil marks"); PC3.ToolTip.visible: hovered
-            }
-            PC3.ToolButton {
-                icon.name: "view-refresh"
-                icon.width: Kirigami.Units.iconSizes.small
-                icon.height: Kirigami.Units.iconSizes.small
-                onClicked: sudoku.newPuzzle()
-                Accessible.name: i18n("New puzzle")
-                PC3.ToolTip.text: i18n("New puzzle"); PC3.ToolTip.visible: hovered
-            }
-        }
-
         Item {
             id: boardBox
             Layout.fillWidth: true
@@ -318,6 +306,19 @@ Item {
                     }
                 }
 
+                Rectangle {
+                    anchors.fill: parent
+                    z: 5
+                    visible: sudoku.solved
+                    color: Qt.rgba(0, 0, 0, 0.5)
+                    ColumnLayout {
+                        anchors.centerIn: parent
+                        spacing: Kirigami.Units.smallSpacing
+                        PC3.Label { text: i18n("Solved!"); color: "white"; font.weight: Font.Bold; Layout.alignment: Qt.AlignHCenter }
+                        PC3.Button { text: i18n("New puzzle"); Layout.alignment: Qt.AlignHCenter; onClicked: sudoku.newPuzzle() }
+                    }
+                }
+
                 /*  The 3×3 block lines, drawn over the cells. */
                 Repeater {
                     model: 4
@@ -342,8 +343,10 @@ Item {
             }
         }
 
-        /*  Touch and mouse input; the keyboard has 1-9 directly. */
+        /*  Touch and mouse input on a card with room for it; the keyboard has
+            1-9 directly, and the compact card uses the popover below. */
         RowLayout {
+            visible: !sudoku.compact
             Layout.fillWidth: true
             spacing: 1
             Repeater {
@@ -357,6 +360,49 @@ Item {
                     font.pointSize: Kirigami.Theme.smallFont.pointSize
                     onClicked: sudoku.put(index < 9 ? index + 1 : 0)
                     Accessible.name: index < 9 ? String(index + 1) : i18n("Clear cell")
+                }
+            }
+        }
+    }
+
+    /*  Compact input: a 3×3 pad plus clear, opened beside the selected cell.
+        It closes once a digit is placed, so the board is back in view. */
+    QQC2.Popup {
+        id: pad
+        visible: sudoku.compact && sudoku.selected >= 0 && !sudoku.solved && !(sudoku.given[sudoku.selected] === true)
+        parent: sudoku
+        readonly property real cell: boardBox.cell
+        readonly property real bx: boardBox.width / 2 - boardBox.side / 2
+        readonly property real by: boardBox.height / 2 - boardBox.side / 2
+        readonly property int selCol: sudoku.selected >= 0 ? sudoku.colOf(sudoku.selected) : 0
+        readonly property int selRow: sudoku.selected >= 0 ? sudoku.rowOf(sudoku.selected) : 0
+        /*  Beside the selection, flipped to stay inside the card. */
+        x: Math.max(0, Math.min(sudoku.width - width, boardBox.x + bx + (selCol >= 5 ? (selCol - 3) * cell - width : (selCol + 1) * cell + 2)))
+        y: Math.max(0, Math.min(sudoku.height - height, boardBox.y + by + selRow * cell - height / 2 + cell / 2))
+        padding: 3
+        closePolicy: QQC2.Popup.NoAutoClose
+        background: Kirigami.ShadowedRectangle {
+            color: Kirigami.Theme.backgroundColor
+            Kirigami.Theme.colorSet: Kirigami.Theme.Window
+            Kirigami.Theme.inherit: false
+            radius: Kirigami.Units.smallSpacing
+            shadow.size: 10
+            shadow.color: Qt.rgba(0, 0, 0, 0.45)
+        }
+        contentItem: Grid {
+            columns: 3
+            spacing: 1
+            Repeater {
+                model: 10
+                delegate: PC3.ToolButton {
+                    required property int index
+                    readonly property int digit: index < 9 ? index + 1 : 0
+                    implicitWidth: Kirigami.Units.iconSizes.smallMedium + 4
+                    implicitHeight: implicitWidth
+                    text: digit > 0 ? String(digit) : "⌫"
+                    font.pointSize: Kirigami.Theme.smallFont.pointSize
+                    onClicked: { sudoku.put(digit); if (!sudoku.noteMode) sudoku.selected = -1 }
+                    Accessible.name: digit > 0 ? String(digit) : i18n("Clear cell")
                 }
             }
         }

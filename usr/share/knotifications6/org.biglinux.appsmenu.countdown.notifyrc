@@ -1,0 +1,13 @@
+[Global]
+IconName=chronometer
+Name=Countdown
+Name[pt_BR]=Contagem regressiva
+Comment=Countdown gadget of the BigLinux applications menu
+Comment[pt_BR]=Gadget de contagem regressiva do menu de aplicativos do BigLinux
+
+[Event/finished]
+Name=Countdown finished
+Name[pt_BR]=Contagem regressiva terminou
+Comment=A countdown reached its end
+Comment[pt_BR]=Uma contagem regressiva chegou ao fim
+Action=Popup

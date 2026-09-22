@@ -27,15 +27,15 @@ Item {
     id: games
     required property var host
 
-    /*  `minCols`/`minRows` are the smallest card each game is playable on.
-        A Sudoku squeezed into 1×1 would be unreadable, so it says so rather
-        than drawing something nobody can use.  */
+    /*  Every game plays at every size, 1x1 included: each one carries its
+        own compact layout (see the `compact` property they all read) rather
+        than a minimum card size. The earlier `minRows` gate is gone.  */
     readonly property var catalogue: [
-        { id: "2048",   name: i18n("2048"),          source: "games/Game2048.qml",   minCols: 1, minRows: 2 },
-        { id: "mines",  name: i18n("Minesweeper"),   source: "games/Minesweeper.qml", minCols: 1, minRows: 2 },
-        { id: "sudoku", name: i18n("Sudoku"),        source: "games/Sudoku.qml",     minCols: 2, minRows: 2 },
-        { id: "flow",   name: i18nc("a game about joining pairs of dots with paths", "Flow Connect"), source: "games/FlowConnect.qml", minCols: 1, minRows: 2 },
-        { id: "blocks", name: i18nc("a game about dropping blocks to clear lines", "Block Puzzle"),  source: "games/BlockPuzzle.qml",  minCols: 1, minRows: 2 }
+        { id: "2048",   name: i18n("2048"),          source: "games/Game2048.qml",    icon: "view-grid-symbolic" },
+        { id: "mines",  name: i18n("Minesweeper"),   source: "games/Minesweeper.qml", icon: "dialog-warning-symbolic" },
+        { id: "sudoku", name: i18n("Sudoku"),        source: "games/Sudoku.qml",      icon: "view-list-details-symbolic" },
+        { id: "flow",   name: i18nc("a game about joining pairs of dots with paths", "Flow Connect"), source: "games/FlowConnect.qml", icon: "draw-path-symbolic" },
+        { id: "blocks", name: i18nc("a game about dropping blocks to clear lines", "Block Puzzle"),  source: "games/BlockPuzzle.qml",  icon: "view-grid-symbolic" }
     ]
 
     readonly property int currentIndex: {
@@ -48,7 +48,10 @@ Item {
         return 0
     }
     readonly property var game: catalogue[currentIndex]
-    readonly property bool fits: host.cols >= game.minCols && host.rows >= game.minRows
+    /*  On a 1x1 card the strip would eat a quarter of the height, so the
+        switcher moves into the title bar as a menu and the board gets the
+        whole card. Larger cards keep the strip, which is quicker to scan.  */
+    readonly property bool compact: host.compact
 
     /*  A game may publish its own options — difficulty, mostly — as a
         `gameSettings` Component; the shared dialog then shows them under the
@@ -59,6 +62,39 @@ Item {
     Component.onCompleted: {
         host.accentColor = "#a855f7"
         host.settingsComponent = settings
+        publishActions()
+    }
+
+    /*  The title bar shows the game switcher (compact only) followed by the
+        actions the current game publishes — New game, Undo, pencil marks —
+        so a compact card keeps its controls without spending board space on
+        them. Games expose them as `titleActions`; the container merges.  */
+    function publishActions() {
+        const own = compact ? [switchAction] : []
+        const theirs = board.item && board.item.titleActions ? board.item.titleActions : []
+        host.titleActions = own.concat(theirs)
+    }
+    onCompactChanged: publishActions()
+
+    QQC2.Action {
+        id: switchAction
+        text: i18nc("@action:button choose another game", "Switch game")
+        icon.name: "view-more-symbolic"
+        onTriggered: switchMenu.popup()
+    }
+    QQC2.Menu {
+        id: switchMenu
+        Repeater {
+            model: games.catalogue
+            delegate: QQC2.MenuItem {
+                required property var modelData
+                required property int index
+                text: modelData.name
+                checkable: true
+                checked: index === games.currentIndex
+                onTriggered: games.host.setCfg("game", modelData.id)
+            }
+        }
     }
 
     ColumnLayout {
@@ -68,6 +104,7 @@ Item {
         /*  The same scrolling strip the news sources use, so five games never
             squeeze each other into illegibility on a narrow card. */
         G.GadgetTabStrip {
+            visible: !games.compact
             Layout.fillWidth: true
             model: games.catalogue
             currentIndex: games.currentIndex
@@ -85,46 +122,21 @@ Item {
             Layout.fillHeight: true
 
             function reload() {
-                if (games.fits) {
-                    setSource(games.game.source, { "host": games.host })
-                } else {
-                    source = ""
-                }
+                setSource(games.game.source, { "host": games.host })
             }
 
             Component.onCompleted: reload()
+            onLoaded: games.publishActions()
         }
 
         Connections {
             target: games
             function onGameChanged() { board.reload() }
-            function onFitsChanged() { board.reload() }
         }
-
-        /*  Too small for this game: say so and offer the way out, rather than
-            drawing a board nobody can read. */
-        ColumnLayout {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            visible: !games.fits
-
-            Item { Layout.fillHeight: true }
-            Kirigami.Icon {
-                source: "zoom-in"
-                Layout.preferredWidth: Kirigami.Units.iconSizes.large
-                Layout.preferredHeight: Kirigami.Units.iconSizes.large
-                Layout.alignment: Qt.AlignHCenter
-                opacity: 0.45
-            }
-            PC3.Label {
-                text: i18n("%1 needs a bigger card. Resize this gadget to play.", games.game.name)
-                wrapMode: Text.Wrap
-                horizontalAlignment: Text.AlignHCenter
-                opacity: 0.7
-                font.pointSize: Kirigami.Theme.smallFont.pointSize
-                Layout.fillWidth: true
-            }
-            Item { Layout.fillHeight: true }
+        Connections {
+            target: board.item
+            ignoreUnknownSignals: true
+            function onTitleActionsChanged() { games.publishActions() }
         }
     }
 

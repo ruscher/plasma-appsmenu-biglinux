@@ -14,6 +14,7 @@
 
 import QtQuick 2.15
 import QtQuick.Layouts 1.15
+import QtQuick.Controls 2.15 as QQC2
 import org.kde.plasma.components 3.0 as PC3
 import org.kde.kirigami 2.20 as Kirigami
 
@@ -31,7 +32,27 @@ Item {
     property var undoState: null
 
     Component.onCompleted: { host.accentColor = "#eab308"; reset() }
-    Binding { target: game.host; property: "subtitle"; value: i18n("Best %1", game.best) }
+
+    /*  Score and best live in the title bar's subtitle and the two controls
+        in its action slot, at every size: the board is what the card is for,
+        so the whole content area goes to it. On a 1x1 card that is the
+        difference between a board you can play and one you squint at.  */
+    Binding { target: game.host; property: "subtitle"; value: i18nc("@info:status score and record", "%1 · best %2", game.score, game.best) }
+    readonly property bool compact: host.compact
+    property var titleActions: [undoAction, newAction]
+    QQC2.Action {
+        id: undoAction
+        text: i18nc("@action:button", "Undo (U)")
+        icon.name: "edit-undo-symbolic"
+        enabled: game.undoState !== null
+        onTriggered: game.undo()
+    }
+    QQC2.Action {
+        id: newAction
+        text: i18nc("@action:button", "New game (R)")
+        icon.name: "view-refresh-symbolic"
+        onTriggered: game.reset()
+    }
 
     // ── model: one entry per tile, positioned by row/col ──
     ListModel { id: tiles }
@@ -205,44 +226,16 @@ Item {
         anchors.fill: parent
         spacing: Kirigami.Units.smallSpacing
 
-        // ── score row ──
-        RowLayout {
-            id: scoreRow
-            Layout.fillWidth: true
-            spacing: Kirigami.Units.smallSpacing
-            PC3.Label {
-                text: i18n("Score %1", game.score)
-                font.weight: Font.DemiBold
-                elide: Text.ElideRight
-                Layout.fillWidth: true
-            }
-            PC3.ToolButton {
-                icon.name: "edit-undo"
-                icon.width: Kirigami.Units.iconSizes.small; icon.height: Kirigami.Units.iconSizes.small
-                enabled: game.undoState !== null
-                onClicked: game.undo()
-                Accessible.name: i18n("Undo")
-                PC3.ToolTip.text: i18n("Undo (U)"); PC3.ToolTip.visible: hovered
-            }
-            PC3.ToolButton {
-                icon.name: "view-refresh"
-                icon.width: Kirigami.Units.iconSizes.small; icon.height: Kirigami.Units.iconSizes.small
-                onClicked: game.reset()
-                Accessible.name: i18n("New game")
-                PC3.ToolTip.text: i18n("New game (R)"); PC3.ToolTip.visible: hovered
-            }
-        }
-
         // ── board ──
         Item {
             id: boardBox
             Layout.fillWidth: true
             Layout.fillHeight: true
-            Layout.minimumHeight: Kirigami.Units.gridUnit * 4
+            Layout.minimumHeight: Kirigami.Units.gridUnit * 3
             // The arrows live inside this item, right under the board, and the
             // board is shrunk to leave room for them: a card taller than the
             // scrolling viewport would otherwise clip a row of the layout.
-            readonly property real dpadHeight: dpad.implicitHeight + Kirigami.Units.smallSpacing
+            readonly property real dpadHeight: dpad.visible ? dpad.implicitHeight + Kirigami.Units.smallSpacing : 0
             readonly property real s: Math.max(40, Math.min(width, height - dpadHeight))
             readonly property real gap: Math.max(3, s * 0.03)
             readonly property real cell: (s - gap * 5) / 4
@@ -373,8 +366,12 @@ Item {
             }
 
             // ── direction pad: the game is usable with the mouse alone ──
+            /*  Swipe and the keyboard always work; the arrows are for the
+                mouse, and on a 1x1 card they would cost a quarter of the
+                board, so there they are left out.  */
             Row {
                 id: dpad
+                visible: !game.compact
                 anchors.top: boardBg.bottom
                 anchors.topMargin: Kirigami.Units.smallSpacing
                 anchors.horizontalCenter: parent.horizontalCenter

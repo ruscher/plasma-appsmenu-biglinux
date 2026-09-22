@@ -112,11 +112,19 @@ Item {
                     }
 
                     // hands
+                    /*  Hour and minute hands sweep to their new position; the
+                        seconds hand ticks. Sweeping the seconds hand meant a
+                        500 ms animation starting every second — the minute hand
+                        did the same, since its angle carried a seconds term —
+                        and any running animation is a full-window frame at
+                        vsync. On the lab VM this gadget alone held the menu at
+                        ~24 fps while it was otherwise idle.  */
                     component Hand : Rectangle {
                         id: hand
                         property real len: 0.3
                         property real thick: 0.03
                         property real angle: 0
+                        property bool sweeps: true
                         width: Math.max(2, face.width * thick)
                         height: face.width * len
                         radius: width / 2
@@ -127,14 +135,14 @@ Item {
                             origin.x: width / 2; origin.y: height - width / 2
                             angle: hand.angle
                             Behavior on angle {
-                                enabled: Kirigami.Units.longDuration > 0
+                                enabled: hand.sweeps && Kirigami.Units.longDuration > 0
                                 RotationAnimation { duration: 500; direction: RotationAnimation.Clockwise; easing.type: Easing.OutCubic }
                             }
                         }
                     }
                     Hand { len: 0.24; thick: 0.05; color: Kirigami.Theme.textColor; angle: (clock.now.getHours() % 12) * 30 + clock.now.getMinutes() * 0.5 }
-                    Hand { len: 0.36; thick: 0.035; color: Kirigami.Theme.textColor; angle: clock.now.getMinutes() * 6 + clock.now.getSeconds() * 0.1 }
-                    Hand { visible: clock.showSeconds; len: 0.42; thick: 0.012; color: clock.host.accent; angle: clock.now.getSeconds() * 6 }
+                    Hand { len: 0.36; thick: 0.035; color: Kirigami.Theme.textColor; angle: clock.now.getMinutes() * 6 }
+                    Hand { visible: clock.showSeconds; sweeps: false; len: 0.42; thick: 0.012; color: clock.host.accent; angle: clock.now.getSeconds() * 6 }
                     Rectangle {
                         width: Math.max(4, face.width * 0.06); height: width; radius: width / 2
                         anchors.centerIn: parent

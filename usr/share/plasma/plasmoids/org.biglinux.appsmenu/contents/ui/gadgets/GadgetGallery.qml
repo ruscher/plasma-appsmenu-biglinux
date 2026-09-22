@@ -134,7 +134,8 @@ QQC2.Popup {
                                 spacing: Kirigami.Units.smallSpacing
                                 Kirigami.Icon {
                                     source: cell.modelData.icon
-                                    fallback: "dialog-information"
+                                    fallback: cell.modelData.iconFallback || "dialog-information"
+                                    isMask: String(cell.modelData.icon).indexOf("-symbolic") !== -1
                                     Layout.preferredWidth: Kirigami.Units.iconSizes.medium
                                     Layout.preferredHeight: Kirigami.Units.iconSizes.medium
                                 }

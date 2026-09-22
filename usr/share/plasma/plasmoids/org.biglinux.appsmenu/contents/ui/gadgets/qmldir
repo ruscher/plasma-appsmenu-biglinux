@@ -4,3 +4,4 @@ GadgetGrid 1.0 GadgetGrid.qml
 GadgetGallery 1.0 GadgetGallery.qml
 GadgetSettingsDialog 1.0 GadgetSettingsDialog.qml
 GadgetTitleBar 1.0 GadgetTitleBar.qml
+singleton SensorCatalog 1.0 SensorCatalog.qml
