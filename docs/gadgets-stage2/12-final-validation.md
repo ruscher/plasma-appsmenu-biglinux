@@ -28,8 +28,8 @@ mentioning the plasmoid, binding loops, `Overwriting binding`, `TypeError`,
 | 13 | No repeated shell commands for network data | **pass** | one `busctl` per rescan; everything else from the plasma-nm model |
 | 14 | Gear opens System Settings → network natively | **pass** | `KCMLauncher.openSystemSettings("kcm_networkmanagement")` |
 | 15 | Countdown: next event highlighted + scrollable list | **pass** | 20 events: 1 highlighted, 19 in the `ListView` |
-| 16 | Alarm loops until acknowledged | **pass** | `playing=true` until `acknowledge()`, then `false` |
-| 17 | Safe alarm lifecycle, no orphan process, no `while true` | **pass** | `MediaPlayer loops: Infinite` in-process; `pgrep` for players: none |
+| 16 | Alarm loops until acknowledged | **pass** | repeats every 2.5 s while unacknowledged; `playing` true → false on acknowledge, on the VM and on the developer's machine |
+| 17 | Safe alarm lifecycle, no orphan process, no `while true` | **pass** | a QML `Timer` drives one short-lived play command per repetition; no shell loop; `pgrep` for players after stopping: none |
 | 18 | Alarm window titled "Countdown" with a chronometer icon | **pass** | own `notifyrc` component; bus capture showed `app_name "Countdown"`, `app_icon "chronometer"` (`04`) |
 | 19 | Dismiss stops audio, closes, marks acknowledged | **pass** | probe log `ringing 1 → 0`, `notes 1 → 0`, `acked` persisted across a Plasma restart |
 | 20 | Symbolic icons for Games / Gallery / Calendar etc., central, verified, with fallback | **pass** | `GadgetRegistry` entries with `iconFallback`; names checked on disk (`05`) |
@@ -59,7 +59,7 @@ mentioning the plasmoid, binding loops, `Overwriting binding`, `TypeError`,
 | 44 | Countdown tests | **pass** | 2 simultaneous, 20 events, restart |
 | 45 | Sensor / fan tests incl. empty states | **pass** | VM empty states; host populated; disappearance simulated |
 | 46 | Logs clean | **pass** | zero QML messages in every run of the final tree (games cycle, countdown, stress, X11, final) |
-| 47 | No heavy dependencies | **pass** | KSystemStats, plasma-nm, KCMUtils, KNotification already on every Plasma; `qt6-multimedia` optional (beep fallback) |
+| 47 | No heavy dependencies | **pass** | KSystemStats, plasma-nm, KCMUtils, KNotification already on every Plasma; audio is `canberra-gtk-play`/`paplay`/`pw-play` out of process, no media framework linked into the shell |
 | 48 | Security: no unsafe shell concatenation | **pass** | the only shell path is `busctl` with a regex-validated object path; sensors/network/files never reach a shell |
 | 49 | Regressions: configs, layout, scores, events, cache preserved; `puzzle → games` keeps 1x1 | **pass** | migration keeps size; `best` untouched; countdown events survived restarts |
 | 50 | Code quality: no AI comments, TODOs, dead code | **pass** | `grep -riE "claude\|anthropic\|todo\|fixme"` finds nothing under `gadgets/`, `InfoPage.qml` or the docs; the seven `TODO`/`HACK` lines that remain are upstream Kickoff comments in `KickoffListView/GridView`, `LeaveButtons` and `main.qml`, untouched by this work |
@@ -84,6 +84,29 @@ Countdown's highlighted event plus its scrolling list, and the
 | stress, 48 gadgets, timeline + 40 open/close cycles | Wayland | idle 4 fps, edit = idle, RSS plateau; 0 messages |
 | Info page idle / edit, 24 gadgets | **X11** | 4 fps, 9–14 % CPU; 0 messages |
 | Info page idle / edit, 24 gadgets, final clean install | Wayland | 4 fps idle and in edit; 0 messages (`11`) |
+
+## A crash this validation missed
+
+Everything above passed on the lab VM, and the Countdown alarm still shipped
+a bug that put the developer's desktop into a 122-restart SIGSEGV loop the
+moment it was installed: `QtMultimedia` → FFmpeg → Vulkan → the machine's
+**vkBasalt** layer (`04`). The alarm is now played out of process and the
+crash is gone, verified on that machine.
+
+Two lessons, recorded because they are about this validation, not about the
+alarm:
+
+- **A lab VM cannot clear a graphics or media stack.** The VM has no real
+  GPU, no Vulkan layers, no VAAPI; the very things that make a desktop
+  machine's media stack fragile are the things it does not have. Anything
+  touching audio, video or the GPU needs a run on hardware before it is
+  called tested.
+- **"The service is active" is not "it did not crash."** The first check
+  after installing read `systemctl is-active` and a single pid, both of
+  which a crash loop satisfies perfectly — systemd had already restarted it.
+  The check that catches it is the same pid sampled over a minute, plus
+  `NRestarts` and `coredumpctl`, which is what this document's numbers now
+  come from.
 
 ## Not tested, and why
 
