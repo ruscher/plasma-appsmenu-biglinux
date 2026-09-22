@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    SPDX-FileCopyrightText: 2026 BigLinux Team
+    SPDX-License-Identifier: GPL-2.0-or-later
+
+    Thermometer, symbolic. Breeze's `temperature-normal-symbolic` is a
+    symlink to the coloured status icon, whose paths carry a stylesheet
+    class and a semi-transparent fill; drawn as a mask it collapses into a
+    filled square. This is a plain single-path glyph that masks correctly.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+  <g fill="currentColor">
+    <path d="M8 1.2A2.3 2.3 0 0 0 5.7 3.5v5.24a3.6 3.6 0 1 0 4.6 0V3.5A2.3 2.3 0 0 0 8 1.2zm0 1.3c.55 0 1 .45 1 1v5.9c0 .23.12.44.32.56a2.3 2.3 0 1 1-2.64 0c.2-.12.32-.33.32-.56V3.5c0-.55.45-1 1-1z"/>
+    <path d="M8 4.6a.62.62 0 0 0-.62.62v5.3a1.6 1.6 0 1 0 1.24 0v-5.3A.62.62 0 0 0 8 4.6z"/>
+    <path d="M11.1 4.2h2.6v1.2h-2.6zM11.1 7.1h1.7v1.2h-1.7z"/>
+  </g>
+</svg>
